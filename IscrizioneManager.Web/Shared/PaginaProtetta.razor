@@ -1,0 +1,61 @@
+@* Avvolge il contenuto di una pagina e controlla evento selezionato e permessi.
+   Uso: <PaginaProtetta Permessi="@(new[] { Permessi.IscrittiView })"> ... </PaginaProtetta> *@
+@implements IDisposable
+@inject AppState AppState
+@inject NavigationManager Navigation
+
+@if (!AppState.IsAuthenticated)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (RichiedeEvento && !AppState.HasEvento)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (!Autorizzato)
+{
+    <MudPaper Class="pa-8 mt-6 mx-auto" MaxWidth="520px" Elevation="0" Outlined="true">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3">
+            <MudIcon Icon="@Icons.Material.Outlined.Lock" Size="Size.Large" Color="Color.Warning" />
+            <MudText Typo="Typo.h6">Accesso non consentito</MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center">
+                Il tuo account non ha i permessi per questa sezione@(AppState.EventoCorrente != null ? $" nell'evento {AppState.EventoCorrente.Nome}" : "").
+            </MudText>
+            <MudButton Href="@Rotte.Home" Variant="Variant.Filled" Color="Color.Primary">Torna alla home</MudButton>
+        </MudStack>
+    </MudPaper>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>Basta uno di questi permessi sull'evento corrente. Vuoto = nessun permesso richiesto.</summary>
+    [Parameter] public string[] Permessi { get; set; } = Array.Empty<string>();
+
+    [Parameter] public bool RichiedeEvento { get; set; } = true;
+
+    [Parameter] public bool RichiedeSuperadmin { get; set; }
+
+    private bool Autorizzato =>
+        (!RichiedeSuperadmin || AppState.IsSuperadmin) &&
+        (Permessi.Length == 0 || AppState.CanAny(Permessi));
+
+    protected override void OnInitialized()
+    {
+        AppState.Changed += OnStateChanged;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (AppState.IsAuthenticated && RichiedeEvento && !AppState.HasEvento)
+            Navigation.NavigateTo(Rotte.Eventi);
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => AppState.Changed -= OnStateChanged;
+}

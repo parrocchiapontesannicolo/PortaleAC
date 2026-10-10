@@ -1,1 +1,0 @@
-C:\Users\Michele\Documents\IscrizioneManagerV2\IscrizioneManager.Web\bin\Release\net8.0\publish\web.config

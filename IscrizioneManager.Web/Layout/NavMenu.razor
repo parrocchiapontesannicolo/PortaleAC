@@ -1,0 +1,54 @@
+@implements IDisposable
+@inject AppState AppState
+
+<MudNavMenu Class="pt-2" Color="Color.Primary">
+    @if (AppState.HasEvento)
+    {
+        <MudNavLink Href="@Rotte.Home" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Dashboard">Home</MudNavLink>
+
+        @if (AppState.CanAny(Permessi.IscrittiView, Permessi.IscrittiEdit, Permessi.IscrittiPagamenti))
+        {
+            <MudNavLink Href="@Rotte.Iscritti" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.People">Iscritti</MudNavLink>
+        }
+        @if (AppState.Can(Permessi.IscrittiEdit))
+        {
+            <MudNavLink Href="@Rotte.NuovaIscrizione" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.PersonAdd">Nuova iscrizione</MudNavLink>
+        }
+        @if (AppState.CanAny(Permessi.SquadreView, Permessi.SquadreEdit))
+        {
+            <MudNavLink Href="@Rotte.Squadre" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.Groups">Squadre</MudNavLink>
+        }
+        @if (AppState.CanAny(Permessi.GoogleSheet, Permessi.GoogleDrive))
+        {
+            <MudDivider Class="my-2" />
+            <MudText Typo="Typo.overline" Class="px-4">Documenti</MudText>
+            @if (AppState.Can(Permessi.GoogleSheet))
+            {
+                <MudNavLink Href="@Rotte.FoglioGoogle" Icon="@Icons.Material.Outlined.TableChart">Foglio Google</MudNavLink>
+            }
+            @if (AppState.Can(Permessi.GoogleDrive))
+            {
+                <MudNavLink Href="@Rotte.CartellaDrive" Icon="@Icons.Material.Outlined.FolderShared">Cartella Drive</MudNavLink>
+            }
+        }
+    }
+
+    <MudDivider Class="my-2" />
+    <MudNavLink Href="@Rotte.Eventi" Match="NavLinkMatch.All" Icon="@Icons.Material.Outlined.EventNote">Cambia evento</MudNavLink>
+
+    @if (AppState.IsSuperadmin)
+    {
+        <MudText Typo="Typo.overline" Class="px-4 mt-2">Amministrazione</MudText>
+        <MudNavLink Href="@Rotte.AdminAccount" Icon="@Icons.Material.Outlined.ManageAccounts">Account</MudNavLink>
+        <MudNavLink Href="@Rotte.AdminRuoli" Icon="@Icons.Material.Outlined.AdminPanelSettings">Ruoli e permessi</MudNavLink>
+        <MudNavLink Href="@Rotte.AdminEventi" Icon="@Icons.Material.Outlined.EditCalendar">Eventi</MudNavLink>
+    }
+</MudNavMenu>
+
+@code {
+    protected override void OnInitialized() => AppState.Changed += OnStateChanged;
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => AppState.Changed -= OnStateChanged;
+}

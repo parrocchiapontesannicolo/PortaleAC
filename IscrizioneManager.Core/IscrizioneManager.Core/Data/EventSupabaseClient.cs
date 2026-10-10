@@ -1,4 +1,3 @@
-﻿using IscrizioniManager.Models;
 using Supabase;
 using Supabase.Functions.Interfaces;
 using Supabase.Gotrue;
@@ -13,20 +12,23 @@ using Supabase.Storage.Interfaces;
 
 namespace IscrizioniManager.Data
 {
+  /// <summary>
+  /// Client Supabase legato all'evento selezionato. L'evento si può cambiare
+  /// senza rifare il login (vedi AppState.SelezionaEventoAsync). Il filtro per
+  /// evento è una comodità: l'isolamento vero lo fa la RLS sul database.
+  /// </summary>
   public class EventSupabaseClient : Supabase.Client
   {
     public int _eventId;
-    public RoleValues? _roleId;
 
-    public EventSupabaseClient(IGotrueClient<User, Session> auth, IRealtimeClient<RealtimeSocket, RealtimeChannel> realtime, 
-      IFunctionsClient functions, IPostgrestClient postgrest, IStorageClient<Bucket, FileObject> storage, 
-      SupabaseOptions options, int eventId, RoleValues? roleId) : base(auth, realtime, functions, postgrest, storage, options)
+    public EventSupabaseClient(IGotrueClient<User, Session> auth, IRealtimeClient<RealtimeSocket, RealtimeChannel> realtime,
+      IFunctionsClient functions, IPostgrestClient postgrest, IStorageClient<Bucket, FileObject> storage,
+      SupabaseOptions options, int eventId) : base(auth, realtime, functions, postgrest, storage, options)
     {
       _eventId = eventId;
-      _roleId = roleId;
     }
 
-    public EventSupabaseClient(string supabaseUrl, string? supabaseKey, SupabaseOptions? options = null) : base(supabaseUrl, supabaseKey, options) {}
+    public EventSupabaseClient(string supabaseUrl, string? supabaseKey, SupabaseOptions? options = null) : base(supabaseUrl, supabaseKey, options) { }
 
     public void EnsureEventId(int eventId)
     {

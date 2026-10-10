@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -7,34 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Remove="wwwroot\favicon.ico" />
-    <Content Remove="wwwroot\js\SortableList.js" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="wwwroot\favicon.ico" />
-    <EmbeddedResource Include="wwwroot\js\SortableList.js">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </EmbeddedResource>
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.11" PrivateAssets="all" />
+    <PackageReference Include="MudBlazor" Version="9.11.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\IscrizioneManager.Core\IscrizioneManager.Core\IscrizioneManager.Core.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="wwwroot\Nuova cartella\" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="wwwroot\css\SortableList.css">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

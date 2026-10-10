@@ -1,3 +1,0 @@
-﻿<Project>
-  <Import Project="..\buildMultiTargeting\IscrizioneManager.Web.props" />
-</Project>

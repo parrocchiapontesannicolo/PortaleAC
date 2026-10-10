@@ -1,43 +1,18 @@
-﻿@page "/"
-@using IscrizioneManager.Core.Services
-@inject LocalStorageService Storage
+@page "/"
+@inject AppState AppState
 @inject NavigationManager Navigation
 
-<h3>Caricamento...</h3>
+<MudProgressLinear Indeterminate="true" Color="Color.Primary" />
 
 @code {
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnAfterRender(bool firstRender)
     {
-        try
-        {
-            var token = await Storage.GetItem("jwtToken");
-            var refresh = await Storage.GetItem("refreshToken");
-            var eventId = await Storage.GetItem("eventId");
-            var roleId = await Storage.GetItem("roleId");
+        if (!firstRender)
+            return;
 
-            if (!string.IsNullOrEmpty(token) &&
-                !string.IsNullOrEmpty(refresh) &&
-                !string.IsNullOrEmpty(eventId) &&
-                !string.IsNullOrEmpty(roleId))
-            {
-                Navigation.NavigateTo("home");
-            }
-            else
-            {
-                Navigation.NavigateTo("login");
-            }
-        }
-        catch (Exception)
-        {
-            await Storage.RemoveItem("jwtToken");
-            await Storage.RemoveItem("refreshToken");
-            await Storage.RemoveItem("eventId");
-            await Storage.RemoveItem("eventDesc");
-            await Storage.RemoveItem("roleId");
-
-            ClientHolder.Reset();
-            Navigation.NavigateTo("login", true);
-        }
+        if (!AppState.IsAuthenticated)
+            Navigation.NavigateTo(Rotte.Login);
+        else
+            Navigation.NavigateTo(AppState.HasEvento ? Rotte.Home : Rotte.Eventi);
     }
 }

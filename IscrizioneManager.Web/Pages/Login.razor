@@ -1,82 +1,119 @@
-﻿@page "/login"
-@using IscrizioneManager.Core.Services
-@using IscrizioneManager.Web.Services
-@using IscrizioniManager.Controllers
-@using IscrizioniManager.Models
-@inject LocalStorageService Storage
+@page "/login"
+@layout EmptyLayout
+@inject AuthService AuthService
+@inject AppState AppState
 @inject NavigationManager Navigation
-@inject LoginController LoginController
 
-<link href="css/Login.css" rel="stylesheet" />
+<PageTitle>Accedi - Portale AC</PageTitle>
 
-<LoadingView @ref="LoadingOverlay" />
+<div class="login-page">
+    <MudPaper Elevation="4" Class="login-card pa-6 pa-sm-8">
+        <MudStack Spacing="1" AlignItems="AlignItems.Center" Class="mb-6">
+            <MudAvatar Color="Color.Primary" Size="Size.Large">
+                <MudIcon Icon="@Icons.Material.Filled.Diversity3" />
+            </MudAvatar>
+            <MudText Typo="Typo.h5">Portale AC</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Accedi con il tuo account</MudText>
+        </MudStack>
 
-<EditForm Model="VM" OnValidSubmit="DoLogin">
-    <div class="login-container" style="display:@(IsLoading ? "none" : null)">
-        <label>Ruolo</label>
-        <select @bind="VM.SelectedRoleValue">
-            @foreach (var r in VM.Roles)
-            {
-                <option value="@((int)r.Value)">@r.DisplayName</option>
-            }
-        </select>
-
-        <label>Evento</label>
-        <select @bind="eventoId">
-            @foreach (var e in Eventi)
-            {
-                <option value="@e.Id">@e.Nome</option>
-            }
-        </select>
-
-        <label>Password</label>
-        <input type="password" @bind="VM.Password" />
-
-        <button type="submit">Login</button>
-
-        @if (!string.IsNullOrEmpty(VM.ErrorMessage))
+        @if (_caricamento)
         {
-            <p class="error">@VM.ErrorMessage</p>
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
         }
-    </div>
-</EditForm>
+        else
+        {
+            <EditForm Model="this" OnSubmit="Accedi">
+                <MudStack Spacing="4">
+                    <MudSelect T="LoginAccount" @bind-Value="_account" Label="Account" Variant="Variant.Outlined"
+                               ToStringFunc="@(a => a?.Nome)" AnchorOrigin="Origin.BottomCenter"
+                               Disabled="_inCorso" AdornmentIcon="@Icons.Material.Filled.Badge">
+                        @foreach (var a in _accounts)
+                        {
+                            <MudSelectItem T="LoginAccount" Value="a">@a.Nome</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    <MudTextField T="string" @bind-Value="_password" Label="Password" Variant="Variant.Outlined"
+                                  InputType="@(_mostraPassword ? InputType.Text : InputType.Password)"
+                                  Adornment="Adornment.End"
+                                  AdornmentIcon="@(_mostraPassword ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                  OnAdornmentClick="() => _mostraPassword = !_mostraPassword"
+                                  AdornmentAriaLabel="Mostra password"
+                                  Disabled="_inCorso" autocomplete="current-password" />
+
+                    @if (!string.IsNullOrEmpty(_errore))
+                    {
+                        <MudAlert Severity="Severity.Error" Dense="true">@_errore</MudAlert>
+                    }
+
+                    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled" Color="Color.Primary"
+                               Size="Size.Large" FullWidth="true" Disabled="_inCorso || _account == null">
+                        @if (_inCorso)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Accesso in corso…</span>
+                        }
+                        else
+                        {
+                            <span>Accedi</span>
+                        }
+                    </MudButton>
+                </MudStack>
+            </EditForm>
+        }
+    </MudPaper>
+</div>
 
 @code {
-    private LoadingView? LoadingOverlay;
-    private LoginViewModel VM;
-    private bool IsLoading = true;
-    private List<Evento> Eventi { get; set; }
-    private int eventoId { get; set; }
+    private List<LoginAccount> _accounts = new();
+    private LoginAccount? _account;
+    private string _password = string.Empty;
+    private bool _mostraPassword;
+    private bool _caricamento = true;
+    private bool _inCorso;
+    private string? _errore;
 
     protected override async Task OnInitializedAsync()
     {
-        VM = new LoginViewModel(LoginController, Storage);
+        if (AppState.IsAuthenticated)
+        {
+            Navigation.NavigateTo(AppState.HasEvento ? Rotte.Home : Rotte.Eventi);
+            return;
+        }
 
-        // Mostra overlay
-        IsLoading = true;
-        StateHasChanged();
-
-        Eventi = await VM.LoadEventiAsync();
-
-        // Nascondi overlay
-        LoadingOverlay.Stop();
-        IsLoading = false;
-        StateHasChanged();
+        try
+        {
+            _accounts = await AuthService.GetLoginAccountsAsync();
+            if (_accounts.Count == 1)
+                _account = _accounts[0];
+        }
+        catch (Exception ex)
+        {
+            _errore = "Impossibile caricare gli account: " + ex.Message;
+        }
+        _caricamento = false;
     }
 
-    private async Task DoLogin()
+    private async Task Accedi()
     {
-        IsLoading = true;
-        LoadingOverlay.Start();
-        StateHasChanged();
+        if (_account == null || _inCorso)
+            return;
 
-        var success = await VM.LoginAsync(Eventi.Single(x => x.Id == eventoId));
-
-        LoadingOverlay.Stop();
-        IsLoading = false;
-        StateHasChanged();
-
-        if (success)
-            Navigation.NavigateTo("home");
+        _inCorso = true;
+        _errore = null;
+        try
+        {
+            await AuthService.SignInAsync(_account, _password);
+            Navigation.NavigateTo(AppState.HasEvento ? Rotte.Home : Rotte.Eventi);
+        }
+        catch (Exception ex)
+        {
+            _errore = ex.Message;
+            _password = string.Empty;
+        }
+        finally
+        {
+            _inCorso = false;
+        }
     }
 }

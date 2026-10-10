@@ -1,24 +1,19 @@
-﻿using IscrizioniManager.Controllers;
 using IscrizioniManager.Data;
-using IscrizioniManager.Models;
-using Microsoft.Extensions.Logging;
-using Newtonsoft.Json.Linq;
-using Supabase;
-using System;
 
 namespace IscrizioneManager.Core.Services
 {
+  /// <summary>
+  /// Client autenticato corrente. Viene impostato da AuthService al login (o al
+  /// ripristino della sessione) e azzerato al logout.
+  /// </summary>
   public static class ClientHolder
   {
     private static EventSupabaseClient? _client;
 
-    public static EventSupabaseClient Client
-    {
-      get
-      {
-        return _client;
-      }
-    }
+    public static EventSupabaseClient Client =>
+      _client ?? throw new InvalidOperationException("Sessione non inizializzata: effettua il login.");
+
+    public static bool IsInitialized => _client != null;
 
     public static void Initialize(EventSupabaseClient client)
     {
@@ -29,34 +24,5 @@ namespace IscrizioneManager.Core.Services
     {
       _client = null;
     }
-
-    public static bool IsInitialized => _client != null;
-
-
-    public static async Task EnsureInitializedAsync(LocalStorageService storage)
-    {
-      if (_client != null)
-        return;
-      try{
-        var token = await storage.GetItem("jwtToken");
-        var refreshToken = await storage.GetItem("refreshToken");
-        var eventId = await storage.GetItem("eventId");
-        var roleId = await storage.GetItem("roleId");
-
-        if (token != null && refreshToken != null && eventId != null && roleId != null)
-        {
-          _client = await LoginController.InitializeClientFromToken(token, refreshToken, int.Parse(eventId), int.Parse(roleId));
-        }
-      }
-      catch (Exception)
-      {
-        await storage.RemoveItem("jwtToken");
-        await storage.RemoveItem("refreshToken");
-        await storage.RemoveItem("eventId");
-        await storage.RemoveItem("eventDesc");
-        await storage.RemoveItem("roleId");
-      }
-    }
   }
-
 }

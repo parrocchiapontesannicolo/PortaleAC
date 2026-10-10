@@ -1,3 +1,0 @@
-C:\Users\miche\Documents\Michele\IscrizioneManagerV2\IscrizioneManager.Web\bin\Release\net8.0\publish\wwwroot\js\SortableList.js
-C:\Users\miche\Documents\Michele\IscrizioneManagerV2\IscrizioneManager.Web\bin\Release\net8.0\publish\wwwroot\css\SortableList.css
-C:\Users\miche\Documents\Michele\IscrizioneManagerV2\IscrizioneManager.Web\bin\Release\net8.0\publish\web.config

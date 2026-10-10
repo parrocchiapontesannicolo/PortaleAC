@@ -1,3 +1,140 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject AppState AppState
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject LocalStorageService Storage
+@inject ISnackbar Snackbar
 
-@Body
+<MudThemeProvider Theme="AppTheme.Theme" @bind-IsDarkMode="_darkMode" />
+<MudPopoverProvider />
+<MudDialogProvider CloseButton="true" />
+<MudSnackbarProvider />
+
+@if (AppState.IsAuthenticated)
+{
+    <MudLayout>
+        <MudAppBar Elevation="1" Dense="true">
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                           OnClick="() => _drawerOpen = !_drawerOpen" aria-label="Menu" />
+            <MudText Typo="Typo.h6" Class="ml-2 d-none d-sm-flex">Portale AC</MudText>
+
+            <MudSpacer />
+
+            @if (AppState.Eventi.Count > 0)
+            {
+                <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" MaxHeight="420">
+                    <ActivatorContent>
+                        <MudButton Color="Color.Inherit" Variant="Variant.Text"
+                                   StartIcon="@Icons.Material.Filled.Event" EndIcon="@Icons.Material.Filled.ArrowDropDown"
+                                   Class="evento-switcher" Style="text-transform:none">
+                            <span class="evento-switcher-label">@(AppState.EventoCorrente?.Nome ?? "Scegli evento")</span>
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        @foreach (var e in AppState.Eventi)
+                        {
+                            var evento = e;
+                            <MudMenuItem OnClick="() => CambiaEvento(evento.EventId)"
+                                         Icon="@(evento.EventId == AppState.EventoCorrente?.EventId ? Icons.Material.Filled.Check : null)">
+                                <MudText Typo="Typo.body2" Style="@(evento.Attivo ? null : "opacity:.6")">
+                                    @evento.Nome
+                                    @if (!evento.Attivo) { <span> (archiviato)</span> }
+                                </MudText>
+                                @if (!string.IsNullOrEmpty(evento.Ruolo))
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@evento.Ruolo</MudText>
+                                }
+                            </MudMenuItem>
+                        }
+                    </ChildContent>
+                </MudMenu>
+            }
+
+            <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
+                <ActivatorContent>
+                    <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" aria-label="Account" />
+                </ActivatorContent>
+                <ChildContent>
+                    <div class="px-4 py-2">
+                        <MudText Typo="Typo.subtitle2">@AppState.Account?.Nome</MudText>
+                        <MudText Typo="Typo.caption">
+                            @(AppState.IsSuperadmin ? "Super amministratore" : AppState.EventoCorrente?.Ruolo)
+                        </MudText>
+                    </div>
+                    <MudDivider />
+                    <MudMenuItem Icon="@(_darkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
+                                 OnClick="ToggleDarkMode">
+                        @(_darkMode ? "Tema chiaro" : "Tema scuro")
+                    </MudMenuItem>
+                    <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="Logout">Esci</MudMenuItem>
+                </ChildContent>
+            </MudMenu>
+        </MudAppBar>
+
+        <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="1" Variant="@DrawerVariant.Responsive">
+            <NavMenu />
+        </MudDrawer>
+
+        <MudMainContent>
+            <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4 px-2 px-sm-4">
+                @* La chiave sull'evento ricrea la pagina quando si cambia evento,
+                   così ogni pagina ricarica i dati senza codice aggiuntivo. *@
+                <div @key="AppState.EventoCorrente?.EventId">
+                    @Body
+                </div>
+            </MudContainer>
+        </MudMainContent>
+    </MudLayout>
+}
+else
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+
+@code {
+    private const string DarkModeKey = "darkMode";
+    private bool _drawerOpen = true;
+    private bool _darkMode;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AppState.Changed += OnStateChanged;
+        _darkMode = await Storage.GetItem(DarkModeKey) == "1";
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!AppState.IsAuthenticated)
+            Navigation.NavigateTo(Rotte.Login);
+    }
+
+    private async Task CambiaEvento(int eventId)
+    {
+        try
+        {
+            await AppState.SelezionaEventoAsync(eventId);
+            Snackbar.Add($"Evento: {AppState.EventoCorrente?.Nome}", Severity.Info);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    private async Task ToggleDarkMode()
+    {
+        _darkMode = !_darkMode;
+        await Storage.SetItem(DarkModeKey, _darkMode ? "1" : "0");
+    }
+
+    private async Task Logout()
+    {
+        await AuthService.SignOutAsync();
+        Navigation.NavigateTo(Rotte.Login);
+    }
+
+    private void OnStateChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => AppState.Changed -= OnStateChanged;
+}

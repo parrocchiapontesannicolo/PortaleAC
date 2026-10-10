@@ -1,21 +1,28 @@
 using IscrizioneManager.Core.Services;
 using IscrizioneManager.Web;
 using IscrizioneManager.Web.Services;
-using IscrizioniManager.Controllers;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using MudBlazor;
+using MudBlazor.Services;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 
-builder.Services.AddScoped<LocalStorageService>();
-//builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) });
-builder.Services.AddSingleton<LoginController>();
+builder.Services.AddMudServices(config =>
+{
+  config.SnackbarConfiguration.PositionClass = Defaults.Classes.Position.BottomCenter;
+  config.SnackbarConfiguration.ShowCloseIcon = true;
+  config.SnackbarConfiguration.VisibleStateDuration = 4000;
+});
+
+builder.Services.AddSingleton<LocalStorageService>();
+builder.Services.AddSingleton<AppState>();
+builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<ModuloIscrizioneViewModel>();
-builder.Logging.SetMinimumLevel(LogLevel.Debug);
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
+
 var host = builder.Build();
 
-var storage = host.Services.GetRequiredService<LocalStorageService>();
-
-await ClientHolder.EnsureInitializedAsync(storage);
+await host.Services.GetRequiredService<AuthService>().TryRestoreSessionAsync();
 
 await host.RunAsync();

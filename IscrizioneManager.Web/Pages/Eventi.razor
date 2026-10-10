@@ -1,0 +1,69 @@
+@page "/eventi"
+@inject AppState AppState
+@inject NavigationManager Navigation
+
+<PageTitle>Scegli evento - Portale AC</PageTitle>
+
+<PaginaProtetta RichiedeEvento="false">
+    <MudText Typo="Typo.h5" Class="mb-1">Scegli l'evento</MudText>
+    <MudText Typo="Typo.body2" Class="mb-4 mud-text-secondary">
+        Puoi cambiare evento in qualsiasi momento dal menu in alto, senza rifare l'accesso.
+    </MudText>
+
+    @if (AppState.Eventi.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info">
+            Il tuo account non è ancora associato a nessun evento. Chiedi all'amministratore di abilitarti.
+        </MudAlert>
+    }
+    else
+    {
+        <MudSwitch T="bool" @bind-Value="_mostraArchiviati" Color="Color.Primary" Label="Mostra eventi archiviati"
+                   Class="mb-2" Disabled="@(!AppState.Eventi.Any(e => !e.Attivo))" />
+
+        <MudGrid Spacing="3">
+            @foreach (var e in EventiVisibili)
+            {
+                var evento = e;
+                var corrente = evento.EventId == AppState.EventoCorrente?.EventId;
+                <MudItem xs="12" sm="6" md="4">
+                    <MudCard Elevation="@(corrente ? 4 : 1)" Outlined="@(!corrente)" Class="@($"evento-card {(corrente ? "evento-card-corrente" : "")}")"
+                             @onclick="() => Seleziona(evento.EventId)">
+                        <MudCardContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                <MudText Typo="Typo.h6">@evento.Nome</MudText>
+                                @if (corrente)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Primary" />
+                                }
+                            </MudStack>
+                            <MudStack Row="true" Spacing="1" Class="mt-2" Wrap="Wrap.Wrap">
+                                @if (!string.IsNullOrEmpty(evento.Ruolo))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined">@evento.Ruolo</MudChip>
+                                }
+                                @if (!evento.Attivo)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Archiviato</MudChip>
+                                }
+                            </MudStack>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</PaginaProtetta>
+
+@code {
+    private bool _mostraArchiviati;
+
+    private IEnumerable<MioEvento> EventiVisibili =>
+        AppState.Eventi.Where(e => e.Attivo || _mostraArchiviati || e.EventId == AppState.EventoCorrente?.EventId);
+
+    private async Task Seleziona(int eventId)
+    {
+        await AppState.SelezionaEventoAsync(eventId);
+        Navigation.NavigateTo(Rotte.Home);
+    }
+}

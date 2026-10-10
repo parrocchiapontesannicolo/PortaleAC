@@ -5,6 +5,7 @@
 @using IscrizioneManager.Core.Models
 @using IscrizioneManager.Core.Logic
 @inject NavigationManager Navigation
+@inject AppState AppState
 
 <link href="css/ListaSquadre.css" rel="stylesheet" />
 
@@ -78,7 +79,7 @@
     {
         LoadingOverlay?.Start();
         Squadre = await SquadraBambinoController.GetSquadreAsync();
-        IsReadOnly = ClientHolder.Client._roleId != RoleValues.Admin;
+        IsReadOnly = !AppState.Can(Permessi.SquadreEdit);
         LoadingOverlay?.Stop();
     }
 
