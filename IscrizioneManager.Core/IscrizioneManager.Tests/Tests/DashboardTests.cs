@@ -127,6 +127,7 @@ public sealed class DashboardControllerTests : IDisposable
         });
         _repoMock.Setup(r => r.GetAnniScolasticiAsync()).ReturnsAsync(new List<AnnoScolastico> { new(1, "Prima media") });
         _repoMock.Setup(r => r.GetIdBambiniAsync()).ReturnsAsync(new List<int> { 10, 11 });
+        _repoMock.Setup(r => r.GetIdBambiniSquadreAsync()).ReturnsAsync(new List<int> { 10, 11, 12 });
         _repoMock.Setup(r => r.GetSquadreAsync()).ReturnsAsync(new List<Squadra> { new() { Id = 1, Nome = "Verdi", Color = "#0a0" } });
         _repoMock.Setup(r => r.GetSquadraBambiniAsync()).ReturnsAsync(new List<SquadraBambino> { new() { IdSquadra = 1, IdBambino = 10 } });
     }
@@ -150,9 +151,23 @@ public sealed class DashboardControllerTests : IDisposable
 
         stats.HaSquadre.Should().BeTrue();
         stats.HaIscritti.Should().BeFalse();
-        stats.SenzaSquadra.Should().Be(1);
+        // Bambini dalla RPC delle squadre (10, 11, 12), 10 è in squadra
+        stats.SenzaSquadra.Should().Be(2);
         _repoMock.Verify(r => r.GetIscrizioniAsync(), Times.Never);
         _repoMock.Verify(r => r.GetAnniScolasticiAsync(), Times.Never);
+        _repoMock.Verify(r => r.GetIdBambiniAsync(), Times.Never);
+        _repoMock.Verify(r => r.GetIdBambiniSquadreAsync(), Times.Once);
+    }
+
+    [Fact]
+    public async Task CaricaAsync_IscrittiESquadre_LeggeLaTabellaBambini()
+    {
+        var stats = await DashboardController.CaricaAsync(iscritti: true, squadre: true);
+
+        stats.HaSquadre.Should().BeTrue();
+        stats.SenzaSquadra.Should().Be(1);
+        _repoMock.Verify(r => r.GetIdBambiniAsync(), Times.Once);
+        _repoMock.Verify(r => r.GetIdBambiniSquadreAsync(), Times.Never);
     }
 
     [Fact]
@@ -167,6 +182,7 @@ public sealed class DashboardControllerTests : IDisposable
         _repoMock.Verify(r => r.GetSquadreAsync(), Times.Never);
         _repoMock.Verify(r => r.GetSquadraBambiniAsync(), Times.Never);
         _repoMock.Verify(r => r.GetIdBambiniAsync(), Times.Never);
+        _repoMock.Verify(r => r.GetIdBambiniSquadreAsync(), Times.Never);
     }
 
     [Fact]

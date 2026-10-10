@@ -274,4 +274,66 @@ public class DistribuisciSquadreTests
 
         squadre.Where(s => s.Id != 0).SelectMany(s => s.Bambini).Should().HaveCount(4);
     }
+
+    private static BambinoSquadre Riga(int id, string cognome, string nome, int? anno) =>
+        new() { IdBambino = id, Cognome = cognome, Nome = nome, Anno = anno };
+
+    [Fact]
+    public void Componi_AssegnaIBambiniEAggiungeSenzaSquadraInFondo()
+    {
+        var squadre = new[] { new Squadra { Id = 1, Nome = "Rossi" }, new Squadra { Id = 2, Nome = "Blu" } };
+        var righe = new[]
+        {
+            Riga(10, "Verdi", "Anna", 2),
+            Riga(11, "Bianchi", "Luca", 1),
+            Riga(12, "Neri", "Sara", null),
+            Riga(13, "Gialli", "Marco", 1),
+            Riga(14, "Viola", "Ugo", 3),
+        };
+        var assegnazioni = new[]
+        {
+            new SquadraBambino { IdSquadra = 1, IdBambino = 10 },
+            new SquadraBambino { IdSquadra = 1, IdBambino = 11 },
+            new SquadraBambino { IdSquadra = 2, IdBambino = 12 },
+            new SquadraBambino { IdSquadra = 99, IdBambino = 14 }, // squadra non più esistente
+        };
+        var anni = new Dictionary<int, string> { [1] = "Prima", [2] = "Seconda" };
+
+        var risultato = SquadraDistributor.Componi(squadre, righe, assegnazioni, anni);
+
+        risultato.Select(s => s.Id).Should().Equal(1, 2, global::Squadra.IdSenzaSquadra);
+        risultato[0].Bambini.Select(b => (b.Id, b.AnnoDesc)).Should().Equal((11, "Prima"), (10, "Seconda"));
+        risultato[1].Bambini.Should().ContainSingle().Which.AnnoDesc.Should().BeEmpty();
+        risultato[2].Nome.Should().Be(global::Squadra.NomeSenzaSquadra);
+        risultato[2].Bambini.Select(b => b.Id).Should().Equal(13, 14);
+        risultato[2].Bambini[1].AnnoDesc.Should().BeEmpty("l'anno 3 non ha una descrizione");
+    }
+
+    [Fact]
+    public void Componi_BambinoDuplicatoONomiNulli_UnaRigaSolaSenzaNull()
+    {
+        var righe = new[]
+        {
+            new BambinoSquadre { IdBambino = 5, Nome = null, Cognome = null, Anno = null },
+            Riga(5, "Doppio", "Doppio", 1),
+        };
+
+        var risultato = SquadraDistributor.Componi(
+            Array.Empty<Squadra>(), righe, Array.Empty<SquadraBambino>(), new Dictionary<int, string>());
+
+        var senza = risultato.Should().ContainSingle().Subject;
+        senza.Bambini.Should().ContainSingle().Which.Nome.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void BambinoSquadre_DeserializzaLeColonneDellaRpc()
+    {
+        const string json = """[{"id_bambino":7,"nome":"Anna","cognome":"Rossi","anno":2},{"id_bambino":8,"nome":"Ugo","cognome":"Neri","anno":null}]""";
+
+        var righe = Newtonsoft.Json.JsonConvert.DeserializeObject<List<BambinoSquadre>>(json)!;
+
+        righe.Should().HaveCount(2);
+        righe[0].Should().BeEquivalentTo(new BambinoSquadre { IdBambino = 7, Nome = "Anna", Cognome = "Rossi", Anno = 2 });
+        righe[1].Anno.Should().BeNull();
+    }
 }

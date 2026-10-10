@@ -14,96 +14,57 @@ public class SupabaseSquadraBambinoRepository : ISquadraBambinoRepository
   public async Task<List<Squadra>> GetSquadreAsync()
   {
     var client = ClientHolder.Client;
-    var bambiniTask = client.GetAll<Bambino>().Select("*").Get();
-    var iscrizioniTask = client.GetAll<Iscrizione>().Select("*").Get();
+    var bambiniTask = LeggiBambiniAsync(client._eventId);
     var squadraBambinoTask = client.GetAll<SquadraBambino>().Select("*").Get();
     var squadraTask = client.GetAll<Squadra>().Select("*").Order("id_squadra", Ordering.Ascending).Get();
     var anniTask = client.BaseFrom<IscrizioneManager.Core.Models.AnnoScolastico>().Select("*").Get();
-    await Task.WhenAll(bambiniTask, iscrizioniTask, squadraBambinoTask, squadraTask, anniTask);
+    await Task.WhenAll(bambiniTask, squadraBambinoTask, squadraTask, anniTask);
 
-    var bambini = bambiniTask.Result.Models;
-    var annoPerBambino = iscrizioniTask.Result.Models
-      .GroupBy(i => i.IdBambino)
-      .ToDictionary(g => g.Key, g => (int?)g.First().Anno);
     var descAnno = anniTask.Result.Models
       .Where(a => a.Id.HasValue)
-      .ToDictionary(a => a.Id!.Value, a => a.Desc ?? "");
-    var squadraPerBambino = squadraBambinoTask.Result.Models
-      .GroupBy(sb => sb.IdBambino)
-      .ToDictionary(g => g.Key, g => g.First().IdSquadra);
+      .GroupBy(a => a.Id!.Value)
+      .ToDictionary(g => g.Key, g => g.First().Desc ?? "");
 
-    Bambino MakeBambino(Bambino x)
-    {
-      var anno = annoPerBambino.GetValueOrDefault(x.Id);
-      return new Bambino
-      {
-        Id = x.Id,
-        Nome = x.Nome,
-        Cognome = x.Cognome,
-        Anno = anno,
-        AnnoDesc = anno.HasValue ? descAnno.GetValueOrDefault(anno.Value, "") : ""
-      };
-    }
-
-    var squadre = squadraTask.Result.Models;
-    var idSquadre = squadre.Select(s => s.Id).ToHashSet();
-
-    foreach (var s in squadre)
-    {
-      s.Bambini = bambini
-        .Where(b => squadraPerBambino.TryGetValue(b.Id, out var id) && id == s.Id)
-        .Select(MakeBambino)
-        .ToList();
-      s.OrdinaBambini();
-    }
-
-    // Senza squadra: anche chi punta a una squadra non più esistente
-    var senzaSquadra = new Squadra
-    {
-      Id = Squadra.IdSenzaSquadra,
-      Nome = Squadra.NomeSenzaSquadra,
-      Color = Squadra.ColoreSenzaSquadra,
-      Bambini = bambini
-        .Where(b => !squadraPerBambino.TryGetValue(b.Id, out var id) || !idSquadre.Contains(id))
-        .Select(MakeBambino)
-        .ToList()
-    };
-    senzaSquadra.OrdinaBambini();
-
-    var risultato = squadre.ToList();
-    risultato.Add(senzaSquadra);
-    return risultato;
+    return SquadraDistributor.Componi(
+      squadraTask.Result.Models, bambiniTask.Result, squadraBambinoTask.Result.Models, descAnno);
   }
+
+  /// <summary>
+  /// Bambini dell'evento con nome, cognome e anno tramite la RPC squadre_bambini:
+  /// funziona anche per chi ha solo i permessi sulle squadre.
+  /// </summary>
+  internal static async Task<List<BambinoSquadre>> LeggiBambiniAsync(int eventId) =>
+    await ClientHolder.Client.Rpc<List<BambinoSquadre>>("squadre_bambini", new Dictionary<string, object>
+    {
+      ["p_event_id"] = eventId,
+    }) ?? new List<BambinoSquadre>();
 
   public async Task SetSquadraAsync(int bambinoId, int newSquadraId)
   {
-    await ClientHolder.Client
-      .GetAll<SquadraBambino>()
-      .Where(x => x.IdBambino == bambinoId)
-      .Delete(Minimal);
-
-    if (newSquadraId != Squadra.IdSenzaSquadra)
-      await ClientHolder.Client
-        .GetAll<SquadraBambino>()
-        .Insert(new SquadraBambino
-        {
-          IdSquadra = newSquadraId,
-          IdBambino = bambinoId,
-          event_id = ClientHolder.Client._eventId
-        }, Minimal);
+    var client = ClientHolder.Client;
+    // Evento letto una volta sola: un cambio evento a metà non deve mescolare i dati.
+    // La RPC cancella e inserisce in un'unica transazione e controlla l'evento.
+    var eventId = client._eventId;
+    await client.Rpc("sposta_bambino", new Dictionary<string, object>
+    {
+      ["p_event_id"] = eventId,
+      ["p_id_bambino"] = bambinoId,
+      ["p_id_squadra"] = newSquadraId,
+    });
   }
 
   public async Task SaveAllAssignmentsAsync(List<Squadra> squadre)
   {
     var client = ClientHolder.Client;
-    var assegnazioni = SquadraDistributor.Assegnazioni(squadre, client._eventId)
+    var eventId = client._eventId;
+    var assegnazioni = SquadraDistributor.Assegnazioni(squadre, eventId)
       .Select(a => new { id_squadra = a.IdSquadra, id_bambino = a.IdBambino })
       .ToList();
 
     // Cancellazione e inserimento in un'unica transazione lato database
     await client.Rpc("salva_squadre", new Dictionary<string, object>
     {
-      ["p_event_id"] = client._eventId,
+      ["p_event_id"] = eventId,
       ["p_assegnazioni"] = assegnazioni,
     });
   }

@@ -198,6 +198,7 @@
     private string? _errore;
     private int _indiceColore;
     private System.Threading.Timer? _timerColori;
+    private bool _disposed;
 
     private bool PuoIscritti => AppState.CanAny(Permessi.IscrittiView, Permessi.IscrittiEdit, Permessi.IscrittiPagamenti);
     private bool PuoPagamenti => AppState.CanAny(Permessi.IscrittiPagamenti, Permessi.IscrittiEdit);
@@ -273,7 +274,8 @@
 
     private void AvviaColori()
     {
-        if (ColoriSquadre.Count < 2)
+        // La pagina può essere già chiusa (cambio evento o navigazione) durante il caricamento
+        if (_disposed || ColoriSquadre.Count < 2)
             return;
 
         _timerColori = new System.Threading.Timer(_ =>
@@ -308,5 +310,9 @@
         return Regex.IsMatch(c, @"^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,20}|(rgb|hsl)a?\([0-9.,%\s]+\))$") ? c : null;
     }
 
-    public void Dispose() => _timerColori?.Dispose();
+    public void Dispose()
+    {
+        _disposed = true;
+        _timerColori?.Dispose();
+    }
 }

@@ -1,4 +1,5 @@
 @page "/squadre"
+@implements IDisposable
 @using IscrizioneManager.Web.Sortable
 @using IscrizioneManager.Web.Pages.Squadre
 @using IscrizioniManager.Models
@@ -258,6 +259,12 @@
     // stesso bambino non devono sovrapporsi sul database.
     private readonly SemaphoreSlim _coda = new(1, 1);
 
+    // Annulla i salvataggi ancora in fila quando la pagina si chiude (es. cambio evento)
+    private readonly CancellationTokenSource _chiusura = new();
+
+    // Evento della pagina: i salvataggi in fila partono solo se è ancora quello corrente
+    private int? _eventoPagina;
+
     private IEnumerable<Squadra> SquadreReali => _squadre.Where(s => !s.IsSenzaSquadra);
     private Squadra? SenzaSquadra => _squadre.FirstOrDefault(s => s.IsSenzaSquadra);
 
@@ -289,6 +296,7 @@
     protected override async Task OnInitializedAsync()
     {
         _puoModificare = AppState.Can(Permessi.SquadreEdit);
+        _eventoPagina = AppState.EventoCorrente?.EventId;
         if (!AppState.CanAny(Permessi.SquadreView, Permessi.SquadreEdit))
         {
             // PaginaProtetta mostra già il messaggio di accesso negato
@@ -456,7 +464,11 @@
 
         _salvataggiInCorso++;
         StateHasChanged();
-        await _coda.WaitAsync();
+        if (!await AttendiTurnoAsync())
+        {
+            _salvataggiInCorso--;
+            return;
+        }
         try
         {
             await SquadraBambinoController.SetSquadraAsync(b.Id, a.Id);
@@ -474,6 +486,30 @@
             _salvataggiInCorso--;
         }
     }
+
+    /// <summary>
+    /// Attende il proprio turno nella coda dei salvataggi. False (e coda non occupata)
+    /// se nel frattempo la pagina si è chiusa o l'evento corrente è cambiato.
+    /// </summary>
+    private async Task<bool> AttendiTurnoAsync()
+    {
+        try
+        {
+            await _coda.WaitAsync(_chiusura.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+
+        if (!_chiusura.IsCancellationRequested && AppState.EventoCorrente?.EventId == _eventoPagina)
+            return true;
+
+        _coda.Release();
+        return false;
+    }
+
+    public void Dispose() => _chiusura.Cancel();
 
     private void OnErroreTrascinamento(Exception ex)
     {
@@ -502,7 +538,11 @@
 
         _salvataggiInCorso++;
         StateHasChanged();
-        await _coda.WaitAsync();
+        if (!await AttendiTurnoAsync())
+        {
+            _salvataggiInCorso--;
+            return;
+        }
         try
         {
             SquadraDistributor.Distribuisci(_squadre);
@@ -577,7 +617,11 @@
 
         _salvataggiInCorso++;
         StateHasChanged();
-        await _coda.WaitAsync();
+        if (!await AttendiTurnoAsync())
+        {
+            _salvataggiInCorso--;
+            return;
+        }
         try
         {
             await SquadraBambinoController.EliminaSquadraAsync(squadra.Id);
