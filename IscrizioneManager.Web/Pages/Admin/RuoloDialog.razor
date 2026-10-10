@@ -1,0 +1,135 @@
+@* Creazione / modifica di un ruolo: nome, descrizione e permessi per gruppo. *@
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="this" OnSubmit="Salva">
+            <MudStack Spacing="3">
+                <MudTextField T="string" @bind-Value="_ruolo.Nome" Label="Nome del ruolo" Variant="Variant.Outlined"
+                              MaxLength="AdminLogica.NomeMaxLength" Immediate="true" AutoFocus="@(_ruolo.Id == 0)" Disabled="_inCorso" />
+                <MudTextField T="string" @bind-Value="_ruolo.Descrizione" Label="Descrizione (facoltativa)" Variant="Variant.Outlined"
+                              Lines="2" MaxLength="200" Disabled="_inCorso" />
+
+                @if (Usi > 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        Il ruolo è usato in @Usi @(Usi == 1 ? "accesso" : "accessi"): le modifiche valgono subito per tutti.
+                    </MudAlert>
+                }
+
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                    <MudText Typo="Typo.subtitle1">Permessi</MudText>
+                    <div>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => Tutti(true)" Disabled="_inCorso">Tutti</MudButton>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => Tutti(false)" Disabled="_inCorso">Nessuno</MudButton>
+                    </div>
+                </MudStack>
+
+                @foreach (var gruppo in AdminLogica.GruppiPermessi())
+                {
+                    <MudPaper Outlined="true" Class="pa-3">
+                        <MudText Typo="Typo.overline" Color="Color.Primary">@gruppo.Key</MudText>
+                        @foreach (var p in gruppo)
+                        {
+                            var permesso = p;
+                            var nota = AdminLogica.NotaPermesso(permesso.Chiave);
+                            <div class="d-flex align-start py-1">
+                                <MudCheckBox T="bool" Value="Ha(permesso.Chiave)" ValueChanged="v => Imposta(permesso.Chiave, v)"
+                                             Color="Color.Primary" Disabled="_inCorso" Dense="true" aria-label="@permesso.Nome" />
+                                <div class="ml-1" style="cursor:pointer" @onclick="() => Imposta(permesso.Chiave, !Ha(permesso.Chiave))">
+                                    <MudText Typo="Typo.body1">@permesso.Nome</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block">@permesso.Descrizione</MudText>
+                                    @if (nota != null)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Info" Class="d-flex align-center gap-1">
+                                            <MudIcon Icon="@Icons.Material.Outlined.Info" Size="Size.Small" /> @nota
+                                        </MudText>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </MudPaper>
+                }
+
+                @if (Ha(Permessi.IscrittiEdit) && !Ha(Permessi.IscrittiSanitario))
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        Con "Inserire e modificare iscrizioni" questo ruolo vede comunque la scheda sanitaria (serve per compilarla).
+                    </MudAlert>
+                }
+                @if (_ruolo.Permessi.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">
+                        Senza permessi chi ha questo ruolo non vedrà l'evento.
+                    </MudAlert>
+                }
+
+                @if (!string.IsNullOrEmpty(_errore))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_errore</MudAlert>
+                }
+            </MudStack>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()" Disabled="_inCorso">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Salva"
+                   Disabled="@(_inCorso || AdminLogica.ValidaNome(_ruolo.Nome) != null)">
+            @if (_inCorso)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @(_ruolo.Id == 0 ? "Crea ruolo" : "Salva")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Ruolo da modificare (null = nuovo). Viene copiato: l'originale cambia solo dopo il salvataggio.</summary>
+    [Parameter] public Ruolo? Originale { get; set; }
+    [Parameter] public List<Ruolo> Esistenti { get; set; } = new();
+    [Parameter] public int Usi { get; set; }
+
+    private Ruolo _ruolo = new();
+    private bool _inCorso;
+    private string? _errore;
+
+    protected override void OnInitialized() => _ruolo = Originale?.Copia() ?? new Ruolo();
+
+    private bool Ha(string chiave) => _ruolo.Permessi.Contains(chiave);
+
+    private void Imposta(string chiave, bool valore)
+    {
+        if (_inCorso)
+            return;
+        _ruolo.Permessi.Remove(chiave);
+        if (valore)
+            _ruolo.Permessi.Add(chiave);
+    }
+
+    private void Tutti(bool valore) =>
+        _ruolo.Permessi = valore ? Permessi.Tutti.Select(p => p.Chiave).ToList() : new List<string>();
+
+    private async Task Salva()
+    {
+        if (_inCorso || AdminLogica.ValidaNome(_ruolo.Nome) != null)
+            return;
+
+        _inCorso = true;
+        _errore = null;
+        try
+        {
+            var salvato = await AdminController.SalvaRuoloAsync(_ruolo, Esistenti);
+            MudDialog.Close(DialogResult.Ok(salvato));
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+}

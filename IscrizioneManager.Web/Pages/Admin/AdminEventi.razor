@@ -1,0 +1,195 @@
+@page "/admin/eventi"
+@inject AppState AppState
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+
+<PageTitle>Gestione eventi - Portale AC</PageTitle>
+
+<PaginaProtetta RichiedeSuperadmin="true" RichiedeEvento="false">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="mb-4" Spacing="2">
+        <div>
+            <MudText Typo="Typo.h5">Eventi</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Crea gli eventi, archivia quelli conclusi e configura modulo di iscrizione, settimane e link Google.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="NuovoEvento" Disabled="@(_caricamento || _errore != null)">Nuovo evento</MudButton>
+    </MudStack>
+
+    @if (_caricamento)
+    {
+        <MudPaper Outlined="true" Class="pa-4">
+            @for (var i = 0; i < 4; i++)
+            {
+                <MudSkeleton SkeletonType="SkeletonType.Text" Height="44px" />
+            }
+        </MudPaper>
+    }
+    else if (_errore != null)
+    {
+        <MudAlert Severity="Severity.Error">
+            Impossibile caricare gli eventi: @_errore
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" OnClick="CaricaAsync" Class="ml-2">Riprova</MudButton>
+        </MudAlert>
+    }
+    else
+    {
+        <MudSwitch T="bool" @bind-Value="_mostraArchiviati" Color="Color.Primary" Class="mb-2"
+                   Label="@($"Mostra archiviati ({_eventi.Count(e => e.IsActive != 1)})")" />
+
+        <MudTable T="Evento" Items="EventiVisibili" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0" Outlined="true"
+                  Loading="_inCorso" LoadingProgressColor="Color.Primary">
+            <HeaderContent>
+                <MudTh>Evento</MudTh>
+                <MudTh>Attivo</MudTh>
+                <MudTh>Account abilitati</MudTh>
+                <MudTh Style="width:180px"></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                @{
+                    var evento = context;
+                    var attivo = evento.IsActive == 1;
+                    var nAccount = _accessi.Count(a => a.EventId == evento.Id);
+                }
+                <MudTd DataLabel="Evento">
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        <MudText Typo="Typo.body1" Style="@(attivo ? "font-weight:500" : "opacity:.6")">@evento.Nome</MudText>
+                        @if (!attivo)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Archiviato</MudChip>
+                        }
+                        @if (evento.Id == AppState.EventoCorrente?.EventId)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">in uso ora</MudChip>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Attivo">
+                    <MudTooltip Text="Gli eventi archiviati restano consultabili ma non compaiono tra quelli proposti">
+                        <MudSwitch T="bool" Value="attivo" ValueChanged="v => ImpostaAttivo(evento, v)" Color="Color.Success"
+                                   Disabled="_inCorso" aria-label="Evento attivo" />
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="Account abilitati">
+                    <MudText Typo="Typo.body2" Color="@(nAccount == 0 ? Color.Warning : Color.Default)">
+                        @(nAccount == 0 ? "Nessuno (solo super admin)" : nAccount.ToString())
+                    </MudText>
+                </MudTd>
+                <MudTd>
+                    <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.Tune" Href="@($"{Rotte.AdminEventi}/{evento.Id}")">Configura</MudButton>
+                        <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" aria-label="Rinomina"
+                                       Disabled="_inCorso" OnClick="() => Rinomina(evento)" />
+                    </MudStack>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4">Nessun evento da mostrare.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    }
+</PaginaProtetta>
+
+@code {
+    private List<Evento> _eventi = new();
+    private List<AccountEvento> _accessi = new();
+    private bool _mostraArchiviati;
+    private bool _caricamento = true;
+    private bool _inCorso;
+    private string? _errore;
+
+    private IEnumerable<Evento> EventiVisibili => _eventi.Where(e => _mostraArchiviati || e.IsActive == 1);
+
+    protected override async Task OnInitializedAsync() => await CaricaAsync();
+
+    private async Task CaricaAsync()
+    {
+        _caricamento = _eventi.Count == 0;
+        _errore = null;
+        try
+        {
+            var eventi = AdminController.GetEventiAsync();
+            var accessi = AdminController.GetAccessiAsync();
+            await Task.WhenAll(eventi, accessi);
+            _eventi = eventi.Result;
+            _accessi = accessi.Result;
+            if (!_eventi.Any(e => e.IsActive == 1))
+                _mostraArchiviati = true;
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _caricamento = false;
+        }
+    }
+
+    private async Task NuovoEvento()
+    {
+        var parametri = new DialogParameters<NuovoEventoDialog> { { d => d.Esistenti, _eventi } };
+        var rif = await DialogService.ShowAsync<NuovoEventoDialog>("Nuovo evento", parametri,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var esito = await rif.Result;
+        if (esito is not { Canceled: false, Data: EventoCreato creato })
+            return;
+
+        if (creato.Avviso != null)
+            Snackbar.Add(creato.Avviso, Severity.Warning, o => o.RequireInteraction = true);
+        else
+            Snackbar.Add($"Evento {creato.Evento.Nome} creato", Severity.Success);
+
+        await AggiornaSessioneAsync();
+        Navigation.NavigateTo($"{Rotte.AdminEventi}/{creato.Evento.Id}");
+    }
+
+    private async Task Rinomina(Evento evento)
+    {
+        var nome = await TestoDialog.ApriAsync(DialogService, "Rinomina evento", "Nome dell'evento", evento.Nome,
+            salva: n => AdminController.RinominaEventoAsync(evento, n, _eventi));
+        if (nome == null)
+            return;
+
+        Snackbar.Add("Evento rinominato", Severity.Success);
+        await AggiornaSessioneAsync();
+    }
+
+    private async Task ImpostaAttivo(Evento evento, bool attivo)
+    {
+        if (_inCorso)
+            return;
+
+        _inCorso = true;
+        try
+        {
+            await AdminController.ImpostaEventoAttivoAsync(evento, attivo);
+            Snackbar.Add(attivo ? $"{evento.Nome} riattivato" : $"{evento.Nome} archiviato", Severity.Success);
+            await AggiornaSessioneAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(AdminLogica.MessaggioErrore(ex), Severity.Error);
+            await CaricaAsync();
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+
+    private async Task AggiornaSessioneAsync()
+    {
+        try
+        {
+            await AppState.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Aggiornamento dell'elenco eventi non riuscito: " + ex.Message, Severity.Warning);
+        }
+    }
+}

@@ -1,0 +1,74 @@
+@* Creazione di un account condiviso tramite la Edge Function admin-accounts. *@
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="this" OnSubmit="Crea">
+            <MudStack Spacing="3">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                    Un account è condiviso da un gruppo di persone (es. "Animatori Campo"): tutti usano lo stesso nome e la
+                    stessa password. Dopo averlo creato scegli a quali eventi può accedere e con quale ruolo.
+                </MudText>
+
+                <MudTextField T="string" @bind-Value="_nome" Label="Nome dell'account" Variant="Variant.Outlined"
+                              MaxLength="AdminLogica.NomeMaxLength" Immediate="true" AutoFocus="true" Disabled="_inCorso"
+                              HelperText="È il nome che compare nella tendina di accesso" />
+
+                <CampoPassword @bind-Value="_password" Disabled="_inCorso" />
+
+                <MudSwitch T="bool" @bind-Value="_superadmin" Color="Color.Warning" Disabled="_inCorso"
+                           Label="Super amministratore (accede a tutto e gestisce account ed eventi)" />
+
+                @if (!string.IsNullOrEmpty(_errore))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_errore</MudAlert>
+                }
+            </MudStack>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()" Disabled="_inCorso">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Crea" Disabled="@(_inCorso || !Valido)">
+            @if (_inCorso)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Crea account
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public List<AppAccount> Esistenti { get; set; } = new();
+
+    private string _nome = string.Empty;
+    private string _password = string.Empty;
+    private bool _superadmin;
+    private bool _inCorso;
+    private string? _errore;
+
+    private bool Valido => AdminLogica.ValidaNome(_nome) == null && AdminLogica.ValidaPassword(_password) == null;
+
+    private async Task Crea()
+    {
+        if (_inCorso || !Valido)
+            return;
+
+        _inCorso = true;
+        _errore = null;
+        try
+        {
+            var risultato = await AdminController.CreaAccountAsync(_nome, _password, _superadmin, Esistenti);
+            MudDialog.Close(DialogResult.Ok(risultato));
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+}

@@ -1,0 +1,627 @@
+@page "/admin/eventi/{EventId:int}"
+@using System.Globalization
+@inject AppState AppState
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>@(_evento?.Nome ?? "Evento") - Configurazione - Portale AC</PageTitle>
+
+<PaginaProtetta RichiedeSuperadmin="true" RichiedeEvento="false">
+    <MudButton Href="@Rotte.AdminEventi" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack" Class="mb-2">
+        Tutti gli eventi
+    </MudButton>
+
+    @if (_caricamento)
+    {
+        <MudSkeleton SkeletonType="SkeletonType.Text" Width="40%" Height="48px" />
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="320px" Class="mt-2" />
+    }
+    else if (_errore != null)
+    {
+        <MudAlert Severity="Severity.Error">
+            Impossibile caricare l'evento: @_errore
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" OnClick="CaricaAsync" Class="ml-2">Riprova</MudButton>
+        </MudAlert>
+    }
+    else if (_evento == null)
+    {
+        <MudAlert Severity="Severity.Warning">Evento non trovato.</MudAlert>
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Spacing="2" Class="mb-3">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
+                <MudText Typo="Typo.h5">@_evento.Nome</MudText>
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="@(Attivo ? Color.Success : Color.Default)">
+                    @(Attivo ? "Attivo" : "Archiviato")
+                </MudChip>
+            </MudStack>
+            <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" StartIcon="@Icons.Material.Outlined.Edit"
+                           OnClick="Rinomina" Disabled="_inCorso">Rinomina</MudButton>
+                <MudButton Size="Size.Small" Variant="Variant.Outlined" Disabled="_inCorso" OnClick="CambiaStato"
+                           StartIcon="@(Attivo ? Icons.Material.Outlined.Archive : Icons.Material.Outlined.Unarchive)">
+                    @(Attivo ? "Archivia" : "Riattiva")
+                </MudButton>
+            </MudStack>
+        </MudStack>
+
+        <MudTabs Elevation="0" Outlined="true" Rounded="true" ApplyEffectsToContainer="true" KeepPanelsAlive="true"
+                 TabPanelsClass="pa-3 pa-sm-4">
+
+            @* ---------------------------------------------------------- Modulo *@
+            <MudTabPanel Text="Modulo iscrizione" Icon="@Icons.Material.Outlined.Assignment">
+                @if (_metadataNuovo)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                        Questo evento non ha ancora una configurazione: sotto vedi quella predefinita. Salvala per attivare il modulo di iscrizione.
+                    </MudAlert>
+                }
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                    Scegli quali sezioni compaiono nel modulo di inserimento e modifica delle iscrizioni.
+                </MudText>
+
+                <MudGrid Spacing="1">
+                    @foreach (var c in AdminLogica.CampiModulo)
+                    {
+                        var campo = c;
+                        <MudItem xs="12" md="6">
+                            <div class="d-flex align-start">
+                                <MudSwitch T="bool" Value="campo.Get(_metadata)" ValueChanged="v => ImpostaCampo(campo, v)"
+                                           Color="Color.Primary" Disabled="_salvataggioModulo" aria-label="@campo.Nome" />
+                                <div>
+                                    <MudText Typo="Typo.body1">@campo.Nome</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">@campo.Descrizione</MudText>
+                                </div>
+                            </div>
+                        </MudItem>
+                    }
+                </MudGrid>
+
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle1">Classi ammesse</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">
+                    Le classi tra cui scegliere nel modulo e nei filtri della lista iscritti.
+                </MudText>
+                @foreach (var g in _anni.GroupBy(a => a.GradoScuola).OrderBy(g => g.Key))
+                {
+                    var grado = g.Key;
+                    <div class="d-flex align-start mb-1">
+                        <MudCheckBox T="bool" Value="_gradi.Contains(grado)" ValueChanged="v => ImpostaGrado(grado, v)"
+                                     Color="Color.Primary" Disabled="_salvataggioModulo" aria-label="@($"Grado {grado}")" />
+                        <div class="pt-2">
+                            <MudText Typo="Typo.body2">@string.Join(", ", g.Select(a => a.Desc))</MudText>
+                        </div>
+                    </div>
+                }
+                @if (_metadata.View_AnnoScolastico && !_gradi.Any())
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                        La sezione "Classe frequentata" è attiva ma non è ammessa nessuna classe.
+                    </MudAlert>
+                }
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="2" Class="mt-4">
+                    @if (_moduloModificato)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Warning">Modifiche non salvate</MudText>
+                    }
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="SalvaModulo" Disabled="@(_salvataggioModulo || (!_moduloModificato && !_metadataNuovo))">
+                        Salva modulo
+                    </MudButton>
+                </MudStack>
+            </MudTabPanel>
+
+            @* ---------------------------------------------------------- Link Google *@
+            <MudTabPanel Text="Link Google" Icon="@Icons.Material.Outlined.Link">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                    Collegamenti mostrati nel menu "Documenti" a chi ha i permessi Fogli Google / Cartella Drive.
+                    Ricorda di condividere i file su Google con le persone che devono aprirli.
+                </MudText>
+                <MudStack Spacing="3">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudTextField T="string" @bind-Value="_urlFoglio" Label="Foglio Google" Variant="Variant.Outlined"
+                                      Placeholder="https://docs.google.com/spreadsheets/d/..." Immediate="true" Disabled="_salvataggioLink"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.TableChart"
+                                      Error="@(AdminLogica.ValidaUrl(_urlFoglio) != null)" ErrorText="@AdminLogica.ValidaUrl(_urlFoglio)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Href="@_urlFoglio" Target="_blank" Rel="noopener"
+                                       aria-label="Apri il foglio" Disabled="@(string.IsNullOrWhiteSpace(_urlFoglio) || AdminLogica.ValidaUrl(_urlFoglio) != null)" />
+                    </MudStack>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudTextField T="string" @bind-Value="_urlDrive" Label="Cartella Google Drive" Variant="Variant.Outlined"
+                                      Placeholder="https://drive.google.com/drive/folders/..." Immediate="true" Disabled="_salvataggioLink"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.FolderShared"
+                                      Error="@(AdminLogica.ValidaUrl(_urlDrive) != null)" ErrorText="@AdminLogica.ValidaUrl(_urlDrive)" />
+                        <MudIconButton Icon="@Icons.Material.Filled.OpenInNew" Href="@_urlDrive" Target="_blank" Rel="noopener"
+                                       aria-label="Apri la cartella" Disabled="@(string.IsNullOrWhiteSpace(_urlDrive) || AdminLogica.ValidaUrl(_urlDrive) != null)" />
+                    </MudStack>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Lascia vuoto un campo per togliere il collegamento.</MudText>
+                    <MudStack Row="true" Justify="Justify.FlexEnd">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Save"
+                                   OnClick="SalvaLink" Disabled="@(_salvataggioLink || AdminLogica.ValidaUrl(_urlFoglio) != null || AdminLogica.ValidaUrl(_urlDrive) != null)">
+                            Salva link
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudTabPanel>
+
+            @* ---------------------------------------------------------- Settimane *@
+            <MudTabPanel Text="Settimane" Icon="@Icons.Material.Outlined.DateRange" BadgeData="@(_settimane.Count == 0 ? null : _settimane.Count)" BadgeColor="Color.Primary">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-3" Spacing="2">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Le settimane tra cui scegliere nel modulo di iscrizione.</MudText>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="() => ModificaSettimana(null)" Disabled="_inCorso">Aggiungi settimana</MudButton>
+                </MudStack>
+                @if (_settimane.Count == 0)
+                {
+                    <MudText Class="mud-text-secondary">Nessuna settimana.</MudText>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true" ReadOnly="true" Padding="false">
+                        @foreach (var s in _settimane)
+                        {
+                            var settimana = s;
+                            <MudListItem T="string">
+                                <div class="d-flex align-center gap-2">
+                                    <div class="flex-grow-1">
+                                        <MudText Typo="Typo.body1">
+                                            @(string.IsNullOrWhiteSpace(settimana.Desc) ? "Settimana" : settimana.Desc)
+                                        </MudText>
+                                        <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                            @settimana.DataInizio.ToString("dd/MM/yyyy") – @settimana.DataFine.ToString("dd/MM/yyyy")
+                                            @if (settimana.CostoIntero != null || settimana.CostoBase != null)
+                                            {
+                                                <span> · @Euro(settimana.CostoIntero) intero · @Euro(settimana.CostoBase) base</span>
+                                            }
+                                        </MudText>
+                                    </div>
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" aria-label="Modifica"
+                                                   Disabled="_inCorso" OnClick="() => ModificaSettimana(settimana)" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error" aria-label="Elimina"
+                                                   Disabled="_inCorso" OnClick="() => EliminaSettimana(settimana)" />
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudTabPanel>
+
+            @* ---------------------------------------------------------- Taglie *@
+            <MudTabPanel Text="Taglie" Icon="@Icons.Material.Outlined.Checkroom">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-3" Spacing="2">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Taglie della maglietta (sezione "Taglia maglietta" del modulo).</MudText>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="() => ModificaTaglia(null)" Disabled="_inCorso">Aggiungi taglia</MudButton>
+                </MudStack>
+                @if (_taglie.Count == 0)
+                {
+                    <MudText Class="mud-text-secondary">Nessuna taglia.</MudText>
+                }
+                else
+                {
+                    <div class="d-flex flex-wrap gap-2">
+                        @foreach (var t in _taglie)
+                        {
+                            var taglia = t;
+                            <MudChip T="string" Variant="Variant.Outlined" Color="Color.Primary" Disabled="_inCorso"
+                                     OnClick="() => ModificaTaglia(taglia)" OnClose="() => EliminaTaglia(taglia)">
+                                @taglia.Codice@(string.IsNullOrWhiteSpace(taglia.Descrizione) ? "" : $" · {taglia.Descrizione}")
+                            </MudChip>
+                        }
+                    </div>
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">Tocca una taglia per modificarla, la × per eliminarla.</MudText>
+                }
+            </MudTabPanel>
+
+            @* ---------------------------------------------------------- Consensi *@
+            <MudTabPanel Text="Consensi" Icon="@Icons.Material.Outlined.FactCheck">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Class="mb-3" Spacing="2">
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">Consensi richiesti ai genitori (sezione "Consensi" del modulo).</MudText>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="() => ModificaConsenso(null)" Disabled="_inCorso">Aggiungi consenso</MudButton>
+                </MudStack>
+                @if (_consensi.Count == 0)
+                {
+                    <MudText Class="mud-text-secondary">Nessun consenso.</MudText>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true" ReadOnly="true" Padding="false">
+                        @foreach (var c in _consensi)
+                        {
+                            var consenso = c;
+                            <MudListItem T="string">
+                                <div class="d-flex align-center gap-2">
+                                    <MudText Typo="Typo.body2" Class="flex-grow-1">@consenso.Descrizione</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" aria-label="Modifica"
+                                                   Disabled="_inCorso" OnClick="() => ModificaConsenso(consenso)" />
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error" aria-label="Elimina"
+                                                   Disabled="_inCorso" OnClick="() => EliminaConsenso(consenso)" />
+                                </div>
+                            </MudListItem>
+                        }
+                    </MudList>
+                }
+            </MudTabPanel>
+
+            @* ---------------------------------------------------------- Accessi *@
+            <MudTabPanel Text="Accessi" Icon="@Icons.Material.Outlined.ManageAccounts">
+                <MudText Typo="Typo.body2" Class="mud-text-secondary mb-3">
+                    Quali account possono entrare in questo evento e con quale ruolo. Le modifiche si salvano subito.
+                </MudText>
+                <MudStack Spacing="0">
+                    @foreach (var a in _accounts)
+                    {
+                        var account = a;
+                        <div class="d-flex flex-wrap align-center gap-2 py-2" style="border-bottom:1px solid var(--mud-palette-lines-default)">
+                            <div class="flex-grow-1" style="min-width:160px">
+                                <MudText Typo="Typo.body1" Style="@(account.Attivo ? null : "opacity:.6")">@account.Nome</MudText>
+                                @if (!account.Attivo)
+                                {
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">Account disattivato</MudText>
+                                }
+                            </div>
+                            @if (account.IsSuperadmin)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                         Icon="@Icons.Material.Filled.AllInclusive">Super admin: accesso completo</MudChip>
+                            }
+                            else
+                            {
+                                <MudSelect T="int" Value="RuoloDi(account.Id)" ValueChanged="v => ImpostaRuolo(account, v)"
+                                           Label="Ruolo" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                                           Style="min-width:200px; max-width:280px" Disabled="_inCorso">
+                                    <MudSelectItem T="int" Value="0">Nessun accesso</MudSelectItem>
+                                    @foreach (var r in _ruoli)
+                                    {
+                                        <MudSelectItem T="int" Value="r.Id">@r.Nome</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+                        </div>
+                    }
+                </MudStack>
+            </MudTabPanel>
+        </MudTabs>
+    }
+</PaginaProtetta>
+
+@code {
+    [Parameter] public int EventId { get; set; }
+
+    private static readonly CultureInfo _it = CultureInfo.GetCultureInfo("it-IT");
+
+    private Evento? _evento;
+    private List<Evento> _eventi = new();
+    private EventoMetadata _metadata = new();
+    private HashSet<int> _gradi = new();
+    private List<AnnoScolastico> _anni = new();
+    private List<LinkGoogleAdmin> _link = new();
+    private List<SettimanaAdmin> _settimane = new();
+    private List<TagliaAdmin> _taglie = new();
+    private List<TipoConsensoAdmin> _consensi = new();
+    private List<AppAccount> _accounts = new();
+    private List<Ruolo> _ruoli = new();
+    private List<AccountEvento> _accessi = new();
+
+    private string? _urlFoglio;
+    private string? _urlDrive;
+
+    private bool _caricamento = true;
+    private bool _inCorso;
+    private bool _salvataggioModulo;
+    private bool _salvataggioLink;
+    private bool _metadataNuovo;
+    private bool _moduloModificato;
+    private string? _errore;
+
+    private bool Attivo => _evento?.IsActive == 1;
+
+    private int _eventoCaricato;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_eventoCaricato == EventId)
+            return;
+        _eventoCaricato = EventId;
+        await CaricaAsync();
+    }
+
+    private async Task CaricaAsync()
+    {
+        _caricamento = true;
+        _errore = null;
+        try
+        {
+            var eventi = AdminController.GetEventiAsync();
+            var metadata = AdminController.GetMetadataAsync(EventId);
+            var anni = AdminController.GetAnniScolasticiAsync();
+            var link = AdminController.GetLinkAsync(EventId);
+            var settimane = AdminController.GetSettimaneAsync(EventId);
+            var taglie = AdminController.GetTaglieAsync(EventId);
+            var consensi = AdminController.GetTipiConsensoAsync(EventId);
+            var accounts = AdminController.GetAccountsAsync();
+            var ruoli = AdminController.GetRuoliAsync();
+            var accessi = AdminController.GetAccessiAsync();
+            await Task.WhenAll(eventi, metadata, anni, link, settimane, taglie, consensi, accounts, ruoli, accessi);
+
+            _eventi = eventi.Result;
+            _evento = _eventi.FirstOrDefault(e => e.Id == EventId);
+            _anni = anni.Result;
+            _metadataNuovo = metadata.Result == null;
+            _metadata = metadata.Result ?? AdminLogica.MetadataPredefinito(EventId, _anni.Select(a => a.GradoScuola));
+            _gradi = AdminLogica.ParseGradi(_metadata.GradiScuolaAllowed).ToHashSet();
+            _moduloModificato = false;
+            _link = link.Result;
+            _urlFoglio = _link.FirstOrDefault(l => l.UrlType == (int)UrlTypes.GoogleSheet)?.Url;
+            _urlDrive = _link.FirstOrDefault(l => l.UrlType == (int)UrlTypes.GoogleDrive)?.Url;
+            _settimane = settimane.Result;
+            _taglie = taglie.Result;
+            _consensi = consensi.Result;
+            _accounts = accounts.Result;
+            _ruoli = ruoli.Result;
+            _accessi = accessi.Result.Where(a => a.EventId == EventId).ToList();
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _caricamento = false;
+        }
+    }
+
+    private string Euro(decimal? valore) => valore == null ? "–" : valore.Value.ToString("C", _it);
+
+    /// <summary>Esegue un'operazione con indicatore, messaggio di esito e ricarica opzionale di una lista.</summary>
+    private async Task Esegui(Func<Task> operazione, string messaggioOk, Func<Task>? poi = null)
+    {
+        if (_inCorso)
+            return;
+
+        _inCorso = true;
+        try
+        {
+            await operazione();
+            Snackbar.Add(messaggioOk, Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(AdminLogica.MessaggioErrore(ex), Severity.Error);
+        }
+        finally
+        {
+            try
+            {
+                if (poi != null)
+                    await poi();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(AdminLogica.MessaggioErrore(ex), Severity.Error);
+            }
+            _inCorso = false;
+        }
+    }
+
+    private async Task<bool> ConfermaAsync(string titolo, string testo)
+    {
+        var esito = await DialogService.ShowMessageBoxAsync(titolo, testo, yesText: "Elimina", cancelText: "Annulla");
+        return esito == true;
+    }
+
+    private async Task AggiornaSessioneAsync()
+    {
+        try
+        {
+            await AppState.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Aggiornamento dell'elenco eventi non riuscito: " + ex.Message, Severity.Warning);
+        }
+    }
+
+    // ---------------------------------------------------------------- evento
+
+    private async Task Rinomina()
+    {
+        if (_evento == null)
+            return;
+        var nome = await TestoDialog.ApriAsync(DialogService, "Rinomina evento", "Nome dell'evento", _evento.Nome,
+            salva: n => AdminController.RinominaEventoAsync(_evento, n, _eventi));
+        if (nome == null)
+            return;
+        Snackbar.Add("Evento rinominato", Severity.Success);
+        await AggiornaSessioneAsync();
+    }
+
+    private async Task CambiaStato()
+    {
+        if (_evento == null)
+            return;
+        var attivo = !Attivo;
+        await Esegui(() => AdminController.ImpostaEventoAttivoAsync(_evento, attivo),
+            attivo ? "Evento riattivato" : "Evento archiviato", AggiornaSessioneAsync);
+    }
+
+    // ---------------------------------------------------------------- modulo
+
+    private void ImpostaCampo(AdminLogica.CampoModulo campo, bool valore)
+    {
+        campo.Set(_metadata, valore);
+        _moduloModificato = true;
+    }
+
+    private void ImpostaGrado(int grado, bool valore)
+    {
+        if (valore)
+            _gradi.Add(grado);
+        else
+            _gradi.Remove(grado);
+        _moduloModificato = true;
+    }
+
+    private async Task SalvaModulo()
+    {
+        if (_salvataggioModulo)
+            return;
+
+        _salvataggioModulo = true;
+        try
+        {
+            _metadata = await AdminController.SalvaMetadataAsync(EventId, _metadata, _gradi);
+            _metadataNuovo = false;
+            _moduloModificato = false;
+            Snackbar.Add("Modulo di iscrizione salvato", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(AdminLogica.MessaggioErrore(ex), Severity.Error);
+        }
+        finally
+        {
+            _salvataggioModulo = false;
+        }
+    }
+
+    // ---------------------------------------------------------------- link
+
+    private async Task SalvaLink()
+    {
+        if (_salvataggioLink)
+            return;
+
+        _salvataggioLink = true;
+        try
+        {
+            await AdminController.SalvaLinkAsync(EventId, UrlTypes.GoogleSheet, _urlFoglio, _link);
+            await AdminController.SalvaLinkAsync(EventId, UrlTypes.GoogleDrive, _urlDrive, _link);
+            Snackbar.Add("Link salvati", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(AdminLogica.MessaggioErrore(ex), Severity.Error);
+        }
+        finally
+        {
+            try
+            {
+                _link = await AdminController.GetLinkAsync(EventId);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add(AdminLogica.MessaggioErrore(ex), Severity.Error);
+            }
+            _salvataggioLink = false;
+        }
+    }
+
+    // ---------------------------------------------------------------- settimane
+
+    private async Task ModificaSettimana(SettimanaAdmin? settimana)
+    {
+        var parametri = new DialogParameters<SettimanaDialog>
+        {
+            { d => d.EventId, EventId },
+            { d => d.Originale, settimana },
+        };
+        var rif = await DialogService.ShowAsync<SettimanaDialog>(settimana == null ? "Nuova settimana" : "Modifica settimana", parametri,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        if (await rif.Result is { Canceled: false })
+        {
+            Snackbar.Add("Settimana salvata", Severity.Success);
+            await RicaricaSettimane();
+        }
+    }
+
+    private async Task EliminaSettimana(SettimanaAdmin settimana)
+    {
+        if (!await ConfermaAsync("Elimina settimana",
+                $"Eliminare la settimana {settimana.DataInizio:dd/MM} – {settimana.DataFine:dd/MM}? Non è possibile se ci sono iscritti che l'hanno scelta."))
+            return;
+        await Esegui(() => AdminController.EliminaSettimanaAsync(settimana.Id), "Settimana eliminata", RicaricaSettimane);
+    }
+
+    private async Task RicaricaSettimane() => _settimane = await AdminController.GetSettimaneAsync(EventId);
+
+    // ---------------------------------------------------------------- taglie
+
+    private async Task ModificaTaglia(TagliaAdmin? taglia)
+    {
+        var parametri = new DialogParameters<TagliaDialog>
+        {
+            { d => d.EventId, EventId },
+            { d => d.Originale, taglia },
+        };
+        var rif = await DialogService.ShowAsync<TagliaDialog>(taglia == null ? "Nuova taglia" : "Modifica taglia", parametri,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+        if (await rif.Result is { Canceled: false })
+        {
+            Snackbar.Add("Taglia salvata", Severity.Success);
+            await RicaricaTaglie();
+        }
+    }
+
+    private async Task EliminaTaglia(TagliaAdmin taglia)
+    {
+        if (!await ConfermaAsync("Elimina taglia", $"Eliminare la taglia {taglia.Codice}? Non è possibile se è già stata scelta in qualche iscrizione."))
+            return;
+        await Esegui(() => AdminController.EliminaTagliaAsync(taglia.Id), "Taglia eliminata", RicaricaTaglie);
+    }
+
+    private async Task RicaricaTaglie() => _taglie = await AdminController.GetTaglieAsync(EventId);
+
+    // ---------------------------------------------------------------- consensi
+
+    private async Task ModificaConsenso(TipoConsensoAdmin? consenso)
+    {
+        var testo = await TestoDialog.ApriAsync(DialogService, consenso == null ? "Nuovo consenso" : "Modifica consenso",
+            "Testo del consenso", consenso?.Descrizione ?? string.Empty, maxLength: 500,
+            salva: t => AdminController.SalvaTipoConsensoAsync(new TipoConsensoAdmin
+            {
+                Id = consenso?.Id ?? 0,
+                EventId = EventId,
+                Descrizione = t,
+            }));
+        if (testo == null)
+            return;
+        Snackbar.Add("Consenso salvato", Severity.Success);
+        await RicaricaConsensi();
+    }
+
+    private async Task EliminaConsenso(TipoConsensoAdmin consenso)
+    {
+        if (!await ConfermaAsync("Elimina consenso", "Eliminare questo consenso? Non è possibile se è già stato registrato in qualche iscrizione."))
+            return;
+        await Esegui(() => AdminController.EliminaTipoConsensoAsync(consenso.Id), "Consenso eliminato", RicaricaConsensi);
+    }
+
+    private async Task RicaricaConsensi() => _consensi = await AdminController.GetTipiConsensoAsync(EventId);
+
+    // ---------------------------------------------------------------- accessi
+
+    private int RuoloDi(Guid accountId) => _accessi.FirstOrDefault(a => a.AccountId == accountId)?.RuoloId ?? 0;
+
+    private async Task ImpostaRuolo(AppAccount account, int ruoloId)
+    {
+        var attuale = RuoloDi(account.Id);
+        if (attuale == ruoloId)
+            return;
+
+        var attuali = attuale == 0 ? new Dictionary<int, int>() : new Dictionary<int, int> { [EventId] = attuale };
+        var desiderati = new Dictionary<int, int?> { [EventId] = ruoloId == 0 ? null : ruoloId };
+
+        await Esegui(() => AdminController.SalvaAccessiAsync(account.Id, attuali, desiderati),
+            ruoloId == 0 ? $"{account.Nome} non accede più a questo evento" : $"Ruolo di {account.Nome} aggiornato",
+            async () =>
+            {
+                _accessi = (await AdminController.GetAccessiAsync()).Where(a => a.EventId == EventId).ToList();
+                if (account.Id == AppState.Account?.Id)
+                    await AggiornaSessioneAsync();
+            });
+    }
+}
