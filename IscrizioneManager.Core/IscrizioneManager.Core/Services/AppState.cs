@@ -20,6 +20,17 @@ namespace IscrizioneManager.Core.Services
 
     public event Action? Changed;
 
+    /// <summary>
+    /// Impostata dalle pagine con modifiche non salvate: il layout la chiama
+    /// prima di cambiare evento o uscire. Restituisce false per annullare.
+    /// </summary>
+    public Func<Task<bool>>? ConfermaUscita { get; set; }
+
+    /// <summary>Sessione scaduta o revocata: il layout porta al login.</summary>
+    public event Action? SessioneTerminata;
+
+    internal void NotificaSessioneTerminata() => SessioneTerminata?.Invoke();
+
     public AccountCorrente? Account { get; private set; }
     public IReadOnlyList<MioEvento> Eventi => _eventi;
     public MioEvento? EventoCorrente { get; private set; }
