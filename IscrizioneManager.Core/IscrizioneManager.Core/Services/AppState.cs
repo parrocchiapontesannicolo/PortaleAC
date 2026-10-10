@@ -56,10 +56,12 @@ namespace IscrizioneManager.Core.Services
       Changed?.Invoke();
     }
 
-    /// <summary>Ricarica i permessi (es. dopo modifiche dalla pagina admin).</summary>
+    /// <summary>Ricarica account e permessi (es. dopo modifiche dalla pagina admin).</summary>
     public async Task RefreshAsync()
     {
       var correnteId = EventoCorrente?.EventId;
+      var account = await ClientHolder.Client.Rpc<List<AccountCorrente>>("my_account", new Dictionary<string, object>());
+      Account = account?.FirstOrDefault() ?? Account;
       _eventi = await ClientHolder.Client.Rpc<List<MioEvento>>("my_events", new Dictionary<string, object>()) ?? new();
       SetEvento(_eventi.FirstOrDefault(e => e.EventId == correnteId));
       Changed?.Invoke();

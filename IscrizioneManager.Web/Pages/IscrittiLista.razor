@@ -397,7 +397,7 @@
     private void Apri(IscrittoListaItem item)
     {
         if (PuoAprire)
-            Navigation.NavigateTo($"{Rotte.Iscritti}/{item.IdBambino}");
+            Navigation.NavigateTo(Rotte.DettaglioIscritto(item.IdBambino));
     }
 
     /// <summary>Interruttore "pagato" per chi può modificarlo, altrimenti solo lo stato.</summary>

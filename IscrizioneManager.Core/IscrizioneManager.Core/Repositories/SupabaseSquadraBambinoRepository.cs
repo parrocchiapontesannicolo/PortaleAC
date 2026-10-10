@@ -96,40 +96,16 @@ public class SupabaseSquadraBambinoRepository : ISquadraBambinoRepository
   public async Task SaveAllAssignmentsAsync(List<Squadra> squadre)
   {
     var client = ClientHolder.Client;
-    var nuove = SquadraDistributor.Assegnazioni(squadre, client._eventId);
+    var assegnazioni = SquadraDistributor.Assegnazioni(squadre, client._eventId)
+      .Select(a => new { id_squadra = a.IdSquadra, id_bambino = a.IdBambino })
+      .ToList();
 
-    // Copia delle assegnazioni attuali, per ripristinarle se l'inserimento fallisce
-    var precedenti = (await client.GetAll<SquadraBambino>().Select("*").Get()).Models;
-
-    // GetAll<T>() filtra già sull'evento corrente: si cancella solo questo evento
-    await client.GetAll<SquadraBambino>().Delete(Minimal);
-
-    if (nuove.Count == 0)
-      return;
-
-    try
+    // Cancellazione e inserimento in un'unica transazione lato database
+    await client.Rpc("salva_squadre", new Dictionary<string, object>
     {
-      await client.GetAll<SquadraBambino>().Insert(nuove, Minimal);
-    }
-    catch (Exception ex)
-    {
-      if (precedenti.Count > 0)
-      {
-        try
-        {
-          await client.GetAll<SquadraBambino>().Insert(precedenti
-            .Select(p => new SquadraBambino { IdSquadra = p.IdSquadra, IdBambino = p.IdBambino, event_id = p.event_id })
-            .ToList(), Minimal);
-        }
-        catch (Exception restoreEx)
-        {
-          throw new InvalidOperationException(
-            $"Salvataggio delle squadre non riuscito ({ex.Message}) e ripristino fallito ({restoreEx.Message}).", ex);
-        }
-      }
-      throw new InvalidOperationException(
-        $"Salvataggio delle squadre non riuscito: {ex.Message}. Le assegnazioni precedenti sono state ripristinate.", ex);
-    }
+      ["p_event_id"] = client._eventId,
+      ["p_assegnazioni"] = assegnazioni,
+    });
   }
 
   public async Task<Squadra> CreaSquadraAsync(string nome, string colore)

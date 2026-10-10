@@ -73,9 +73,9 @@ public class SquadraTests
         var conteggi = s.ConteggiPerAnno();
 
         conteggi.Should().Equal(
-            new ConteggioAnno(1, "Prima", 1),
-            new ConteggioAnno(2, "Seconda", 2),
-            new ConteggioAnno(null, "N/D", 1));
+            new ConteggioAnnoSquadra(1, "Prima", 1),
+            new ConteggioAnnoSquadra(2, "Seconda", 2),
+            new ConteggioAnnoSquadra(null, "N/D", 1));
     }
 
     [Fact]

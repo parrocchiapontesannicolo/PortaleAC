@@ -209,6 +209,30 @@ begin
 end
 $$;
 
+-- Ridistribuzione squadre in un'unica transazione: o tutto o niente.
+-- p_assegnazioni = [{"id_squadra": 1, "id_bambino": 10}, ...]
+create or replace function public.salva_squadre(p_event_id integer, p_assegnazioni jsonb)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+begin
+  if not public.has_perm(p_event_id, 'squadre.edit') then
+    raise exception 'Permesso negato' using errcode = '42501';
+  end if;
+
+  delete from public.squadra_bambino where event_id = p_event_id;
+
+  insert into public.squadra_bambino (id_squadra, id_bambino, event_id)
+  select distinct on ((x ->> 'id_bambino')::int)
+         (x ->> 'id_squadra')::int, (x ->> 'id_bambino')::int, p_event_id
+    from jsonb_array_elements(coalesce(p_assegnazioni, '[]'::jsonb)) x
+    join public.bambino b on b.id_bambino = (x ->> 'id_bambino')::int and b.event_id = p_event_id
+    join public.squadra s on s.id_squadra = (x ->> 'id_squadra')::int and s.event_id = p_event_id;
+end
+$$;
+
 -- Ci deve sempre essere almeno un superadmin attivo
 create or replace function public.app_account_guard_superadmin()
 returns trigger
@@ -453,6 +477,8 @@ grant execute on function public.login_accounts() to anon, authenticated;
 revoke all on function public.my_events() from public, anon;
 revoke all on function public.my_account() from public, anon;
 revoke all on function public.set_pagato(integer, boolean) from public, anon;
+revoke all on function public.salva_squadre(integer, jsonb) from public, anon;
+grant execute on function public.salva_squadre(integer, jsonb) to authenticated;
 grant execute on function public.my_events() to authenticated;
 grant execute on function public.my_account() to authenticated;
 grant execute on function public.set_pagato(integer, boolean) to authenticated;

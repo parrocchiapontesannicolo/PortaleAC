@@ -17,5 +17,8 @@ namespace IscrizioneManager.Web.Shared
     public const string AdminAccount = "admin/account";
     public const string AdminRuoli = "admin/ruoli";
     public const string AdminEventi = "admin/eventi";
+
+    public static string DettaglioIscritto(int idBambino) => $"{Iscritti}/{idBambino}";
+    public static string AdminEvento(int eventId) => $"{AdminEventi}/{eventId}";
   }
 }

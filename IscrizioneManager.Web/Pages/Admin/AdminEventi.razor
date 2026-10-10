@@ -80,7 +80,7 @@
                 <MudTd>
                     <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
                         <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                                   StartIcon="@Icons.Material.Filled.Tune" Href="@($"{Rotte.AdminEventi}/{evento.Id}")">Configura</MudButton>
+                                   StartIcon="@Icons.Material.Filled.Tune" Href="@Rotte.AdminEvento(evento.Id)">Configura</MudButton>
                         <MudIconButton Icon="@Icons.Material.Outlined.Edit" Size="Size.Small" aria-label="Rinomina"
                                        Disabled="_inCorso" OnClick="() => Rinomina(evento)" />
                     </MudStack>
@@ -144,7 +144,7 @@
             Snackbar.Add($"Evento {creato.Evento.Nome} creato", Severity.Success);
 
         await AggiornaSessioneAsync();
-        Navigation.NavigateTo($"{Rotte.AdminEventi}/{creato.Evento.Id}");
+        Navigation.NavigateTo(Rotte.AdminEvento(creato.Evento.Id));
     }
 
     private async Task Rinomina(Evento evento)

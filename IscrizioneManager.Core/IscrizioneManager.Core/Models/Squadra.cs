@@ -51,11 +51,11 @@ public class Squadra : EventModel
   }
 
   /// <summary>Numero di bambini per anno scolastico, in ordine di anno.</summary>
-  public List<ConteggioAnno> ConteggiPerAnno() =>
+  public List<ConteggioAnnoSquadra> ConteggiPerAnno() =>
     Bambini
       .GroupBy(b => b.Anno)
       .OrderBy(g => g.Key ?? int.MaxValue)
-      .Select(g => new ConteggioAnno(
+      .Select(g => new ConteggioAnnoSquadra(
         g.Key,
         g.Select(b => b.AnnoDesc).FirstOrDefault(d => !string.IsNullOrWhiteSpace(d)) ?? "N/D",
         g.Count()))
@@ -131,4 +131,4 @@ public class Squadra : EventModel
   }
 }
 
-public record ConteggioAnno(int? Anno, string Descrizione, int Numero);
+public record ConteggioAnnoSquadra(int? Anno, string Descrizione, int Numero);

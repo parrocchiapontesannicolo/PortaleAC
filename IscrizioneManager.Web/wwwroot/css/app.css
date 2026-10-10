@@ -107,3 +107,13 @@ html, body {
     border-radius: var(--mud-default-borderradius);
     background: var(--mud-palette-surface);
 }
+
+/* Riquadri della home */
+.home-tile {
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+    .home-tile:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--mud-elevation-4);
+    }
