@@ -1,8 +1,312 @@
 @page "/home"
+@implements IDisposable
+@using System.Text.RegularExpressions
+@using IscrizioneManager.Core.Controllers
+@using IscrizioneManager.Core.Logic
 @inject AppState AppState
+@inject ISnackbar Snackbar
 
 <PageTitle>Home - Portale AC</PageTitle>
 
 <PaginaProtetta>
-    <MudText Typo="Typo.h5">@AppState.EventoCorrente?.Nome</MudText>
+    @{ var evento = AppState.EventoCorrente!; }
+
+    <MudStack Spacing="1" Class="mb-5">
+        <MudText Typo="Typo.overline" Class="mud-text-secondary">@Saluto</MudText>
+        <MudText Typo="Typo.h4" Style="font-weight:600; overflow-wrap:anywhere; line-height:1.15">@evento.Nome</MudText>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
+            @if (!string.IsNullOrWhiteSpace(evento.Ruolo))
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined" Icon="@Icons.Material.Outlined.Badge">
+                    @evento.Ruolo
+                </MudChip>
+            }
+            @if (AppState.IsSuperadmin)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined" Icon="@Icons.Material.Outlined.AdminPanelSettings">
+                    Super amministratore
+                </MudChip>
+            }
+            @if (!string.IsNullOrWhiteSpace(AppState.Account?.Nome) && AppState.Account.Nome != evento.Ruolo)
+            {
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Icon="@Icons.Material.Outlined.AccountCircle">
+                    @AppState.Account.Nome
+                </MudChip>
+            }
+            @if (!evento.Attivo)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Icon="@Icons.Material.Outlined.Inventory2">
+                    Evento archiviato
+                </MudChip>
+            }
+        </MudStack>
+    </MudStack>
+
+    @if (Tiles.Count == 0)
+    {
+        <MudPaper Outlined="true" Class="pa-6 mx-auto" MaxWidth="560px">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <MudIcon Icon="@Icons.Material.Outlined.SentimentSatisfied" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.h6" Align="Align.Center">Ancora nessuna sezione disponibile</MudText>
+                <MudText Typo="Typo.body2" Align="Align.Center">
+                    Il tuo account non ha ancora permessi su <b>@evento.Nome</b>.
+                    Chiedi all'amministratore di abilitarti, oppure scegli un altro evento.
+                </MudText>
+                @if (AppState.Eventi.Count > 1)
+                {
+                    <MudButton Href="@Rotte.Eventi" Variant="Variant.Filled" Color="Color.Primary"
+                               StartIcon="@Icons.Material.Outlined.EventNote">Cambia evento</MudButton>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+    else
+    {
+        <MudGrid Spacing="2">
+            @foreach (var tile in Tiles)
+            {
+                <MudItem xs="12" sm="6" lg="4">
+                    <a href="@tile.Href" style="display:block; height:100%; color:inherit; text-decoration:none" aria-label="@tile.Titolo">
+                        <MudPaper Elevation="1" Class="pa-4 cursor-pointer" Style="height:100%; position:relative; overflow:hidden">
+                            @if (tile.Squadre && ColoriSquadre.Count > 0)
+                            {
+                                <div style="position:absolute; top:0; left:0; right:0; height:6px; display:flex" aria-hidden="true">
+                                    @foreach (var colore in ColoriSquadre)
+                                    {
+                                        <span style="flex:1; background-color:@colore"></span>
+                                    }
+                                </div>
+                            }
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                                <MudAvatar Color="@tile.Colore" Variant="Variant.Filled" Size="Size.Large"
+                                           Style="@(tile.Squadre ? StileAvatarSquadre : null)">
+                                    <MudIcon Icon="@tile.Icona" />
+                                </MudAvatar>
+                                <div style="flex:1; min-width:0">
+                                    <MudText Typo="Typo.h6" Style="line-height:1.2">@tile.Titolo</MudText>
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@tile.Sottotitolo</MudText>
+                                </div>
+                                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Class="mud-text-secondary" />
+                            </MudStack>
+                        </MudPaper>
+                    </a>
+                </MudItem>
+            }
+        </MudGrid>
+
+        @if (MostraStatistiche)
+        {
+            <MudText Typo="Typo.h6" Class="mt-8 mb-3">Numeri dell'evento</MudText>
+
+            @if (_errore != null)
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-3">
+                    Impossibile caricare i numeri dell'evento: @_errore
+                </MudAlert>
+            }
+            else if (_caricamento || _stats == null)
+            {
+                <MudGrid Spacing="2">
+                    @for (var i = 0; i < 4; i++)
+                    {
+                        <MudItem xs="6" md="3">
+                            <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="104px" Style="border-radius:var(--mud-default-borderradius)" />
+                        </MudItem>
+                    }
+                    <MudItem xs="12">
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="180px" Style="border-radius:var(--mud-default-borderradius)" />
+                    </MudItem>
+                </MudGrid>
+            }
+            else
+            {
+                var stats = _stats;
+                <MudGrid Spacing="2">
+                    @if (stats.HaIscritti)
+                    {
+                        @StatTile("Iscritti", stats.TotaleIscritti.ToString(), "bambini iscritti", Icons.Material.Outlined.People, Color.Primary)
+
+                        @if (PuoPagamenti)
+                        {
+                            @StatTile("Pagati", stats.Pagati.ToString(), $"{stats.PercentualePagati}% del totale",
+                                      Icons.Material.Outlined.CheckCircle, Color.Success, stats.PercentualePagati)
+                            @StatTile("Da pagare", stats.DaPagare.ToString(),
+                                      stats.ConCaparra > 0 ? $"di cui {stats.ConCaparra} con caparra" : "quote da saldare",
+                                      Icons.Material.Outlined.Schedule, Color.Warning)
+                        }
+                    }
+                    @if (stats.HaSquadre)
+                    {
+                        @StatTile("Squadre", stats.NumeroSquadre.ToString(),
+                                  stats.SenzaSquadra == 0 ? "tutti assegnati" : $"{stats.SenzaSquadra} senza squadra",
+                                  Icons.Material.Outlined.Groups, stats.SenzaSquadra == 0 ? Color.Success : Color.Info)
+                    }
+                </MudGrid>
+
+                @if (stats.HaIscritti && stats.PerAnno.Count > 0)
+                {
+                    var massimo = stats.PerAnno.Max(a => a.Totale);
+                    <MudPaper Outlined="true" Class="pa-4 mt-3">
+                        <MudText Typo="Typo.subtitle1" Style="font-weight:600" Class="mb-3">Iscritti per anno scolastico</MudText>
+                        <MudStack Spacing="2">
+                            @foreach (var anno in stats.PerAnno)
+                            {
+                                <div title="@($"{anno.Descrizione}: {anno.Totale}")">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Baseline" Spacing="2">
+                                        <MudText Typo="Typo.body2" Style="min-width:0; overflow-wrap:anywhere">@anno.Descrizione</MudText>
+                                        <MudText Typo="Typo.body2" Style="font-weight:600; font-variant-numeric:tabular-nums">@anno.Totale</MudText>
+                                    </MudStack>
+                                    <MudProgressLinear Value="@anno.Totale" Max="@massimo" Rounded="true" Size="Size.Medium"
+                                                       Color="@(anno.AnnoId == null ? Color.Default : Color.Primary)" Class="mt-1" />
+                                </div>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                }
+
+                @if (stats.HaSquadre && stats.Squadre.Count > 0)
+                {
+                    <MudPaper Outlined="true" Class="pa-4 mt-3">
+                        <MudText Typo="Typo.subtitle1" Style="font-weight:600" Class="mb-2">Bambini per squadra</MudText>
+                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1">
+                            @foreach (var squadra in stats.Squadre)
+                            {
+                                <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small">
+                                    <span style="display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; background-color:@(ColoreSicuro(squadra.Colore) ?? "var(--mud-palette-lines-default)")"></span>
+                                    @squadra.Nome · <b class="ml-1">@squadra.Totale</b>
+                                </MudChip>
+                            }
+                            @if (stats.SenzaSquadra > 0)
+                            {
+                                <MudChip T="string" Variant="Variant.Outlined" Size="Size.Small" Color="Color.Warning">
+                                    Senza squadra · <b class="ml-1">@stats.SenzaSquadra</b>
+                                </MudChip>
+                            }
+                        </MudStack>
+                    </MudPaper>
+                }
+            }
+        }
+    }
 </PaginaProtetta>
+
+@code {
+    private sealed record Tile(string Titolo, string Sottotitolo, string Icona, string Href, Color Colore, bool Squadre = false);
+
+    private DashboardStats? _stats;
+    private bool _caricamento;
+    private string? _errore;
+    private int _indiceColore;
+    private System.Threading.Timer? _timerColori;
+
+    private bool PuoIscritti => AppState.CanAny(Permessi.IscrittiView, Permessi.IscrittiEdit, Permessi.IscrittiPagamenti);
+    private bool PuoPagamenti => AppState.CanAny(Permessi.IscrittiPagamenti, Permessi.IscrittiEdit);
+    private bool PuoSquadre => AppState.CanAny(Permessi.SquadreView, Permessi.SquadreEdit);
+    private bool MostraStatistiche => PuoIscritti;
+
+    private static string Saluto
+    {
+        get
+        {
+            var ora = DateTime.Now.Hour;
+            if (ora >= 18)
+                return "Buonasera";
+            return ora >= 12 ? "Buon pomeriggio" : "Buongiorno";
+        }
+    }
+
+    private IReadOnlyList<string> ColoriSquadre =>
+        _stats?.ColoriSquadre.Select(ColoreSicuro).OfType<string>().ToList() ?? new List<string>();
+
+    // Richiamo al vecchio pulsante "Squadre" animato: l'icona cambia colore come le squadre
+    private string? StileAvatarSquadre => ColoriSquadre.Count == 0
+        ? null
+        : $"background-color:{ColoriSquadre[_indiceColore % ColoriSquadre.Count]}; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.45); transition:background-color 1.5s ease";
+
+    private List<Tile> Tiles
+    {
+        get
+        {
+            var tiles = new List<Tile>();
+            if (PuoIscritti)
+                tiles.Add(new("Iscritti",
+                    _stats?.HaIscritti == true ? $"{_stats.TotaleIscritti} iscritti · cerca e consulta" : "Elenco, ricerca e dettagli",
+                    Icons.Material.Outlined.People, Rotte.Iscritti, Color.Primary));
+            if (AppState.Can(Permessi.IscrittiEdit))
+                tiles.Add(new("Nuova iscrizione", "Compila il modulo per un nuovo bambino",
+                    Icons.Material.Outlined.PersonAdd, Rotte.NuovaIscrizione, Color.Secondary));
+            if (PuoSquadre)
+                tiles.Add(new("Squadre",
+                    _stats?.HaSquadre == true ? $"{_stats.NumeroSquadre} squadre · {_stats.SenzaSquadra} senza squadra" : "Composizione delle squadre",
+                    Icons.Material.Outlined.Groups, Rotte.Squadre, Color.Tertiary, Squadre: true));
+            if (AppState.Can(Permessi.GoogleSheet))
+                tiles.Add(new("Foglio Google", "Apri il foglio dell'evento",
+                    Icons.Material.Outlined.TableChart, Rotte.FoglioGoogle, Color.Success));
+            if (AppState.Can(Permessi.GoogleDrive))
+                tiles.Add(new("Cartella Drive", "Documenti e foto condivisi",
+                    Icons.Material.Outlined.FolderShared, Rotte.CartellaDrive, Color.Info));
+            return tiles;
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AppState.IsAuthenticated || !AppState.HasEvento || (!PuoIscritti && !PuoSquadre))
+            return;
+
+        _caricamento = true;
+        try
+        {
+            _stats = await DashboardController.CaricaAsync(PuoIscritti, PuoSquadre);
+            AvviaColori();
+        }
+        catch (Exception ex)
+        {
+            _errore = ex.Message;
+            Snackbar.Add($"Errore nel caricamento della home: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _caricamento = false;
+        }
+    }
+
+    private void AvviaColori()
+    {
+        if (ColoriSquadre.Count < 2)
+            return;
+
+        _timerColori = new System.Threading.Timer(_ =>
+        {
+            _indiceColore++;
+            InvokeAsync(StateHasChanged);
+        }, null, 3000, 3000);
+    }
+
+    private RenderFragment StatTile(string titolo, string valore, string nota, string icona, Color colore, int? percentuale = null) =>
+        @<MudItem xs="6" md="3">
+            <MudPaper Outlined="true" Class="pa-3 pa-sm-4" Style="height:100%">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@icona" Color="@colore" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Class="mud-text-secondary" Style="text-transform:uppercase; letter-spacing:.06em">@titolo</MudText>
+                </MudStack>
+                <MudText Typo="Typo.h4" Style="font-weight:600; font-variant-numeric:tabular-nums" Class="mt-1">@valore</MudText>
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@nota</MudText>
+                @if (percentuale != null)
+                {
+                    <MudProgressLinear Value="@percentuale.Value" Color="@colore" Rounded="true" Size="Size.Small" Class="mt-2" />
+                }
+            </MudPaper>
+        </MudItem>;
+
+    // Colori presi dal database: accetta solo formati CSS semplici
+    private static string? ColoreSicuro(string? colore)
+    {
+        if (string.IsNullOrWhiteSpace(colore))
+            return null;
+        var c = colore.Trim();
+        return Regex.IsMatch(c, @"^(#[0-9a-fA-F]{3,8}|[a-zA-Z]{3,20}|(rgb|hsl)a?\([0-9.,%\s]+\))$") ? c : null;
+    }
+
+    public void Dispose() => _timerColori?.Dispose();
+}
