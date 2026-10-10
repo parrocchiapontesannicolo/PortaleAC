@@ -1,0 +1,9 @@
+@page "/documenti/foglio"
+@using IscrizioneManager.Core.Models
+
+<PageTitle>Foglio Google - Portale AC</PageTitle>
+
+<PaginaProtetta Permessi="@(new[] { Permessi.GoogleSheet })">
+    <DocumentoGoogle Tipo="UrlTypes.GoogleSheet" Titolo="Foglio Google"
+                     Icona="@Icons.Material.Outlined.TableChart" NomeRisorsa="al foglio" />
+</PaginaProtetta>

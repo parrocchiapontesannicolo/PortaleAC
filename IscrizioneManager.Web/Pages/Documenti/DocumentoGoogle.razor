@@ -1,0 +1,178 @@
+@* Mostra nella pagina il link Google (foglio o cartella Drive) configurato per l'evento. *@
+@using IscrizioneManager.Core.Models
+@using IscrizioneManager.Core.Utils
+@using IscrizioniManager.Core.Services
+@inject LocalStorageService Storage
+@inject ISnackbar Snackbar
+
+<MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Style="flex:1 1 220px; min-width:0">
+        <MudIcon Icon="@Icona" Color="Color.Primary" />
+        <MudText Typo="Typo.h5" Style="overflow-wrap:anywhere">@Titolo</MudText>
+    </MudStack>
+
+    @if (_link?.IsCartella == true)
+    {
+        <MudToggleGroup T="bool" Value="_vistaLista" ValueChanged="CambiaVistaAsync" Size="Size.Small"
+                        Outlined="true" Color="Color.Primary" CheckMark="false">
+            <MudToggleItem T="bool" Value="false" Text="Griglia" />
+            <MudToggleItem T="bool" Value="true" Text="Lista" />
+        </MudToggleGroup>
+    }
+    @if (_link?.SupportaModifica == true)
+    {
+        <MudToggleGroup T="bool" Value="_soloLettura" ValueChanged="CambiaModalitaAsync" Size="Size.Small"
+                        Outlined="true" Color="Color.Primary" CheckMark="false">
+            <MudToggleItem T="bool" Value="false" Text="Modifica" />
+            <MudToggleItem T="bool" Value="true" Text="Sola lettura" />
+        </MudToggleGroup>
+    }
+    @if (EmbedUrl != null)
+    {
+        <MudTooltip Text="Ricarica">
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="Ricarica" aria-label="Ricarica" />
+        </MudTooltip>
+    }
+    @if (_url != null)
+    {
+        <MudButton Href="@_url" Target="_blank" Rel="noopener noreferrer" Variant="Variant.Filled" Color="Color.Primary"
+                   Size="Size.Small" StartIcon="@Icons.Material.Filled.OpenInNew">
+            Apri in una nuova scheda
+        </MudButton>
+    }
+</MudStack>
+
+@if (_caricamento)
+{
+    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="420px" Style="border-radius:var(--mud-default-borderradius)" />
+}
+else if (_errore != null)
+{
+    <MudAlert Severity="Severity.Error">
+        Impossibile leggere il link: @_errore
+        <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" Class="ml-2" OnClick="CaricaAsync">Riprova</MudButton>
+    </MudAlert>
+}
+else if (_url == null)
+{
+    <MudPaper Outlined="true" Class="pa-6 mx-auto mt-4" MaxWidth="560px">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3">
+            <MudIcon Icon="@Icons.Material.Outlined.LinkOff" Size="Size.Large" Color="Color.Secondary" />
+            <MudText Typo="Typo.h6" Align="Align.Center">Nessun link configurato per questo evento</MudText>
+            <MudText Typo="Typo.body2" Align="Align.Center">
+                Chiedi all'amministratore di aggiungere il link @NomeRisorsa per questo evento.
+            </MudText>
+        </MudStack>
+    </MudPaper>
+}
+else if (EmbedUrl == null)
+{
+    <MudAlert Severity="Severity.Warning">
+        Questo link non può essere mostrato dentro la pagina (non è un link di Google Drive, Fogli o Documenti riconosciuto).
+        Usa <b>Apri in una nuova scheda</b>.
+    </MudAlert>
+}
+else
+{
+    <iframe @key="@($"{EmbedUrl}|{_ricarica}")" class="embed-frame" src="@EmbedUrl" title="@Titolo"
+            allow="clipboard-write" referrerpolicy="no-referrer-when-downgrade"></iframe>
+
+    <MudAlert Severity="Severity.Info" Dense="true" Variant="Variant.Text" Class="mt-2">
+        Il contenuto compare solo se l'account Google collegato su questo browser ha accesso @NomeRisorsa
+        (oppure se la condivisione è impostata su "Chiunque abbia il link").
+        @if (_link!.SupportaModifica && !_soloLettura)
+        {
+            <span>Per modificare serve un account Google con accesso in modifica.</span>
+        }
+        Su Safari / iPhone l'anteprima può restare vuota perché il browser blocca i cookie di terze parti:
+        in quel caso usa <b>Apri in una nuova scheda</b>.
+    </MudAlert>
+}
+
+@code {
+    private const string VistaListaKey = "documenti.vistaLista";
+    private const string SoloLetturaKey = "documenti.soloLettura";
+
+    [Parameter, EditorRequired] public UrlTypes Tipo { get; set; }
+    [Parameter, EditorRequired] public string Titolo { get; set; } = string.Empty;
+    [Parameter] public string Icona { get; set; } = Icons.Material.Outlined.Description;
+
+    /// <summary>Usato nei messaggi, es. "al foglio" / "alla cartella".</summary>
+    [Parameter] public string NomeRisorsa { get; set; } = "al documento";
+
+    private bool _caricamento = true;
+    private string? _errore;
+    private string? _url;
+    private GoogleLink? _link;
+    private bool _vistaLista;
+    private bool _soloLettura;
+    private int _ricarica;
+
+    private string? EmbedUrl => _link == null ? null : GoogleEmbedHelper.ToEmbedUrl(_link, _soloLettura, _vistaLista);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _vistaLista = await LeggiPreferenzaAsync(VistaListaKey);
+        _soloLettura = await LeggiPreferenzaAsync(SoloLetturaKey);
+        await CaricaAsync();
+    }
+
+    private async Task CaricaAsync()
+    {
+        _caricamento = true;
+        _errore = null;
+        try
+        {
+            _url = await GoogleSheetService.GetUrlAsync(Tipo);
+            _link = GoogleEmbedHelper.Parse(_url, Tipo);
+        }
+        catch (Exception ex)
+        {
+            _errore = ex.Message;
+            Snackbar.Add($"Errore nel caricamento del link: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _caricamento = false;
+        }
+    }
+
+    private async Task CambiaVistaAsync(bool lista)
+    {
+        _vistaLista = lista;
+        await SalvaPreferenzaAsync(VistaListaKey, lista);
+    }
+
+    private async Task CambiaModalitaAsync(bool soloLettura)
+    {
+        _soloLettura = soloLettura;
+        await SalvaPreferenzaAsync(SoloLetturaKey, soloLettura);
+    }
+
+    private void Ricarica() => _ricarica++;
+
+    // Preferenze solo di comodità: se il browser blocca lo storage si usano i valori predefiniti
+    private async Task<bool> LeggiPreferenzaAsync(string chiave)
+    {
+        try
+        {
+            return await Storage.GetItem(chiave) == "1";
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private async Task SalvaPreferenzaAsync(string chiave, bool valore)
+    {
+        try
+        {
+            await Storage.SetItem(chiave, valore ? "1" : "0");
+        }
+        catch
+        {
+            // preferenza non salvata: nessun impatto sul funzionamento
+        }
+    }
+}

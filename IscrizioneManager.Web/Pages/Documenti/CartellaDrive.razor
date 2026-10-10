@@ -1,0 +1,9 @@
+@page "/documenti/drive"
+@using IscrizioneManager.Core.Models
+
+<PageTitle>Cartella Drive - Portale AC</PageTitle>
+
+<PaginaProtetta Permessi="@(new[] { Permessi.GoogleDrive })">
+    <DocumentoGoogle Tipo="UrlTypes.GoogleDrive" Titolo="Cartella Drive"
+                     Icona="@Icons.Material.Outlined.FolderShared" NomeRisorsa="alla cartella" />
+</PaginaProtetta>
