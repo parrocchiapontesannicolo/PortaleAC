@@ -88,3 +88,30 @@ supabase secrets set ACCOUNT_EMAIL_DOMAIN=accounts.portale-ac.it
 
 In *Authentication → Providers → Email* conviene disattivare
 "Allow new users to sign up": gli account li crea solo l'amministratore.
+
+## Dettagli emersi dalla revisione (già nella migrazione)
+
+- **Squadre senza dati personali**: chi ha solo `squadre.*` non legge più le
+  tabelle `bambino`/`iscrizione`; la pagina squadre usa la RPC
+  `squadre_bambini(p_event_id)` (nome, cognome, classe). Gli spostamenti usano
+  `sposta_bambino(...)`, la ridistribuzione `salva_squadre(...)`, entrambe
+  atomiche e con controllo dell'evento.
+- **Riferimenti nello stesso evento**: le policy impediscono di agganciare righe
+  di un evento a bambini/iscrizioni/squadre di un altro.
+- **Genitori condivisi tra eventi** (possibili con i dati v1): restano leggibili
+  e modificabili da chi gestisce l'evento del bambino collegato.
+- **`delete_iscrizione`**: la funzione originale viene rinominata
+  `delete_iscrizione_interna` (non chiamabile dagli utenti) e sostituita da un
+  wrapper che verifica `iscritti.delete` sull'evento del bambino.
+
+La migrazione è stata provata su `supabase/postgres:15.8.1.085` con uno schema
+v1 ricostruito dai modelli C#: applicazione pulita (anche due volte di fila) e
+test per ogni tipo di account. Lo schema reale non è nel repository: per questo
+il passo 2 (dump della baseline) è importante.
+
+## Pubblicazione su GitHub Pages
+
+`dotnet publish -c Release` genera anche `wwwroot/404.html` identico a
+`index.html` (serve per i link diretti e il refresh delle pagine). Quando copi
+la build nella root del repository, imposta `<base href="/PortaleAC/" />` in
+**entrambi** i file.
