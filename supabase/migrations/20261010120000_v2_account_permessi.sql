@@ -428,11 +428,11 @@ create policy anno_scolastico_select on public.anno_scolastico for select to aut
 create policy anno_scolastico_admin on public.anno_scolastico for all to authenticated
   using (public.is_superadmin()) with check (public.is_superadmin());
 
--- Link Google: ciascun tipo ha il suo permesso
+-- Link Google: ciascun tipo ha il suo permesso (qui event_id è bigint)
 create policy google_sheet_select on public.google_sheet for select to authenticated
   using (
-    (url_type = 1 and public.has_perm(event_id, 'google.sheet'))
-    or (url_type = 2 and public.has_perm(event_id, 'google.drive')));
+    (url_type = 1 and public.has_perm(event_id::integer, 'google.sheet'))
+    or (url_type = 2 and public.has_perm(event_id::integer, 'google.drive')));
 create policy google_sheet_admin on public.google_sheet for all to authenticated
   using (public.is_superadmin()) with check (public.is_superadmin());
 
@@ -569,23 +569,283 @@ $$;
 -- ---------------------------------------------------------------------
 -- 5. RPC esistenti: eseguite con i permessi del chiamante
 -- ---------------------------------------------------------------------
-do $$
+-- Stesso codice delle versioni v1 (ora versionate qui), con in più:
+--   - controllo esplicito del permesso iscritti.edit (messaggio chiaro);
+--   - update_iscrizione toglie solo i genitori rimossi dal modulo invece di
+--     cancellare e ricreare tutti i collegamenti: con la RLS un genitore
+--     condiviso con un altro evento (dati v1) è leggibile solo finché il
+--     collegamento esiste.
+-- Restano SECURITY INVOKER: le policy controllano ogni riga scritta.
+
+create or replace function public.create_iscrizione(p_dto jsonb)
+ returns integer
+ language plpgsql
+ set search_path = public
+as $function$
 declare
-  f record;
+    v_bambino_id integer;
+    v_iscrizione_id integer;
+    v_event_id integer;
+    g jsonb;
+    s jsonb;
+    c jsonb;
+    v_genitore_id integer;
 begin
-  for f in
-    select p.oid::regprocedure as sig
-      from pg_proc p
-      join pg_namespace n on n.oid = p.pronamespace
-     where n.nspname = 'public'
-       and p.proname in ('create_iscrizione', 'update_iscrizione')
-  loop
-    execute format('alter function %s security invoker', f.sig);
-    execute format('revoke all on function %s from anon, public', f.sig);
-    execute format('grant execute on function %s to authenticated', f.sig);
-  end loop;
-end
-$$;
+    v_event_id := (p_dto->>'event_id')::int;
+    if v_event_id is null or not public.has_perm(v_event_id, 'iscritti.edit') then
+        raise exception 'Permesso negato' using errcode = '42501';
+    end if;
+
+    -- 1. Bambino
+    insert into bambino(event_id, nome, cognome, data_nascita, genere, luogo_nascita, indirizzo_residenza, comune_residenza)
+    values (
+        v_event_id,
+        p_dto->>'nome',
+        p_dto->>'cognome',
+        (p_dto->>'data_nascita')::date,
+        (p_dto->>'genere')::int,
+        p_dto->>'luogo_nascita',
+        p_dto->>'indirizzo_residenza',
+        p_dto->>'comune_residenza'
+    )
+    returning id_bambino into v_bambino_id;
+
+    -- 2. Iscrizione
+    insert into iscrizione(event_id, id_bambino, anno, note, inclusa_iscrizione_noi, altra_parrocchia, modalita_pagamento, formato_iscrizione, sconto_fratelli, ricevuta, esce_solo, caparra_pagata, priority, desc_ricevuta, email_genitore)
+    values (
+        v_event_id,
+        v_bambino_id,
+        (p_dto->>'anno_scolastico')::int,
+        p_dto->>'note',
+        (p_dto->>'da_iscrivere_al_noi')::boolean,
+        (p_dto->>'altra_parrocchia')::boolean,
+        (p_dto->>'modalita_pagamento')::int,
+        (p_dto->>'formato_iscrizione')::int,
+        (p_dto->>'sconto_fratelli')::boolean,
+        (p_dto->>'ricevuta')::boolean,
+        (p_dto->>'esce_solo')::boolean,
+        (p_dto->>'caparra_pagata')::boolean,
+        (p_dto->>'priority')::boolean,
+        (p_dto->>'desc_ricevuta'),
+        (p_dto->>'email_genitore')
+    )
+    returning id_iscrizione into v_iscrizione_id;
+
+    -- 3. Genitori e collegamenti
+    if jsonb_typeof(p_dto->'genitori') = 'array' then
+        for g in select * from jsonb_array_elements(p_dto->'genitori') loop
+            v_genitore_id := null;
+
+            if (g->>'id_genitore') is not null then
+                select id_genitore into v_genitore_id
+                  from genitore
+                 where id_genitore = (g->>'id_genitore')::int;
+
+                if v_genitore_id is null then
+                    raise exception 'Genitore con Id % non trovato', g->>'id_genitore';
+                end if;
+
+                update genitore
+                   set nome = coalesce(g->>'nome', nome),
+                       cognome = coalesce(g->>'cognome', cognome),
+                       telefono = coalesce(g->>'telefono', telefono),
+                       sesso = coalesce((g->>'sesso')::int, sesso)
+                 where id_genitore = v_genitore_id;
+            else
+                insert into genitore(event_id, nome, cognome, telefono, sesso)
+                values (v_event_id, g->>'nome', g->>'cognome', g->>'telefono', (g->>'sesso')::int)
+                returning id_genitore into v_genitore_id;
+            end if;
+
+            insert into genitore_bambino(event_id, id_genitore, id_bambino)
+            values (v_event_id, v_genitore_id, v_bambino_id)
+            on conflict do nothing;
+        end loop;
+    end if;
+
+    -- 4. Settimane
+    if jsonb_typeof(p_dto->'settimane') = 'array' then
+        for s in select * from jsonb_array_elements(p_dto->'settimane') loop
+            insert into iscrizione_settimana(event_id, id_iscrizione, id_settimana, intero)
+            values (v_event_id, v_iscrizione_id, (s->>'id_settimana')::int, (s->>'intero')::boolean)
+            on conflict do nothing;
+        end loop;
+    end if;
+
+    -- 5. Taglia
+    if (p_dto->>'Taglia') is not null then
+        insert into iscrizione_taglia(event_id, id_iscrizione, id_taglia)
+        values (v_event_id, v_iscrizione_id, (p_dto->>'Taglia')::int)
+        on conflict do nothing;
+    end if;
+
+    -- 6. Scheda sanitaria
+    insert into scheda_sanitaria(event_id, id_iscrizione, allergie_intolleranze, patologie_terapie)
+    values (v_event_id, v_iscrizione_id, p_dto->>'allergie_intolleranze', p_dto->>'patologie_terapie');
+
+    -- 7. Consensi
+    if jsonb_typeof(p_dto->'consensi') = 'array' then
+        for c in select * from jsonb_array_elements(p_dto->'consensi') loop
+            if (c->>'id_tipo_consenso') is not null then
+                insert into consenso(event_id, id_iscrizione, id_tipo_consenso, valore)
+                values (v_event_id, v_iscrizione_id, (c->>'id_tipo_consenso')::int, (c->>'valore')::boolean)
+                on conflict do nothing;
+            end if;
+        end loop;
+    end if;
+
+    return v_bambino_id;
+end;
+$function$;
+
+create or replace function public.update_iscrizione(p_dto jsonb, p_id_bambino integer)
+ returns integer
+ language plpgsql
+ set search_path = public
+as $function$
+declare
+    v_bambino_id integer := p_id_bambino;
+    v_iscrizione_id integer;
+    v_event_id integer;
+    v_genitore_id integer;
+    g jsonb;
+    s jsonb;
+    c jsonb;
+begin
+    v_event_id := (p_dto->>'event_id')::int;
+    if v_event_id is null or not public.has_perm(v_event_id, 'iscritti.edit') then
+        raise exception 'Permesso negato' using errcode = '42501';
+    end if;
+    if not public.bambino_in_evento(v_bambino_id, v_event_id) then
+        raise exception 'Iscritto % non trovato in questo evento', v_bambino_id;
+    end if;
+
+    -- 1. Bambino
+    update bambino
+       set nome = coalesce(p_dto->>'nome', nome),
+           cognome = coalesce(p_dto->>'cognome', cognome),
+           data_nascita = coalesce(p_dto->>'data_nascita', data_nascita),
+           genere = coalesce(nullif(p_dto->>'genere', '')::int, genere),
+           luogo_nascita = coalesce(p_dto->>'luogo_nascita', luogo_nascita),
+           indirizzo_residenza = coalesce(p_dto->>'indirizzo_residenza', indirizzo_residenza),
+           comune_residenza = coalesce(p_dto->>'comune_residenza', comune_residenza)
+     where id_bambino = v_bambino_id;
+
+    -- 2. Iscrizione
+    select id_iscrizione into v_iscrizione_id
+      from iscrizione
+     where id_bambino = v_bambino_id;
+
+    if v_iscrizione_id is null then
+        raise exception 'Iscrizione per bambino % non trovata', v_bambino_id;
+    end if;
+
+    -- 3. Dati iscrizione
+    update iscrizione
+       set anno = coalesce(nullif(p_dto->>'anno_scolastico', '')::int, anno),
+           note = coalesce(p_dto->>'note', note),
+           inclusa_iscrizione_noi = coalesce((p_dto->>'da_iscrivere_al_noi')::boolean, inclusa_iscrizione_noi),
+           altra_parrocchia = coalesce((p_dto->>'altra_parrocchia')::boolean, altra_parrocchia),
+           modalita_pagamento = coalesce(nullif(p_dto->>'modalita_pagamento', '')::int, modalita_pagamento),
+           formato_iscrizione = coalesce(nullif(p_dto->>'formato_iscrizione', '')::int, formato_iscrizione),
+           sconto_fratelli = coalesce((p_dto->>'sconto_fratelli')::boolean, sconto_fratelli),
+           ricevuta = coalesce((p_dto->>'ricevuta')::boolean, ricevuta),
+           esce_solo = coalesce((p_dto->>'esce_solo')::boolean, esce_solo),
+           caparra_pagata = coalesce((p_dto->>'caparra_pagata')::boolean, caparra_pagata),
+           priority = coalesce((p_dto->>'priority')::boolean, priority),
+           desc_ricevuta = coalesce((p_dto->>'desc_ricevuta'), desc_ricevuta),
+           email_genitore = coalesce((p_dto->>'email_genitore'), email_genitore)
+     where id_iscrizione = v_iscrizione_id;
+
+    -- 4. Genitori: toglie solo i collegamenti non più presenti nel modulo
+    if jsonb_typeof(p_dto->'genitori') = 'array' then
+        delete from genitore_bambino
+         where id_bambino = v_bambino_id
+           and id_genitore not in (
+             select (x->>'id_genitore')::int
+               from jsonb_array_elements(p_dto->'genitori') x
+              where nullif(x->>'id_genitore', '') is not null);
+
+        for g in select * from jsonb_array_elements(p_dto->'genitori') loop
+            v_genitore_id := null;
+
+            if nullif(g->>'id_genitore', '') is not null then
+                select id_genitore into v_genitore_id
+                  from genitore
+                 where id_genitore = (g->>'id_genitore')::int;
+
+                if v_genitore_id is null then
+                    raise exception 'Genitore con Id % non trovato', g->>'id_genitore';
+                end if;
+
+                update genitore
+                   set nome = coalesce(g->>'nome', nome),
+                       cognome = coalesce(g->>'cognome', cognome),
+                       telefono = coalesce(g->>'telefono', telefono),
+                       sesso = coalesce(nullif(g->>'sesso', '')::int, sesso)
+                 where id_genitore = v_genitore_id;
+            else
+                insert into genitore(event_id, nome, cognome, telefono, sesso)
+                values (v_event_id, g->>'nome', g->>'cognome', g->>'telefono', nullif(g->>'sesso', '')::int)
+                returning id_genitore into v_genitore_id;
+            end if;
+
+            insert into genitore_bambino(event_id, id_genitore, id_bambino)
+            values (v_event_id, v_genitore_id, v_bambino_id)
+            on conflict do nothing;
+        end loop;
+    end if;
+
+    -- 5. Settimane
+    if jsonb_typeof(p_dto->'settimane') = 'array' then
+        delete from iscrizione_settimana where id_iscrizione = v_iscrizione_id;
+
+        for s in select * from jsonb_array_elements(p_dto->'settimane') loop
+            insert into iscrizione_settimana(event_id, id_iscrizione, id_settimana, intero)
+            values (v_event_id, v_iscrizione_id, (s->>'id_settimana')::int, (s->>'intero')::boolean)
+            on conflict do nothing;
+        end loop;
+    end if;
+
+    -- 6. Taglia
+    if (p_dto->>'taglia') is not null then
+        delete from iscrizione_taglia where id_iscrizione = v_iscrizione_id;
+
+        insert into iscrizione_taglia(event_id, id_iscrizione, id_taglia)
+        values (v_event_id, v_iscrizione_id, (p_dto->>'taglia')::int)
+        on conflict do nothing;
+    end if;
+
+    -- 7. Scheda sanitaria
+    if p_dto ? 'allergie_intolleranze' or p_dto ? 'patologie_terapie' then
+        insert into scheda_sanitaria(event_id, id_iscrizione, allergie_intolleranze, patologie_terapie)
+        values (v_event_id, v_iscrizione_id, p_dto->>'allergie_intolleranze', p_dto->>'patologie_terapie')
+        on conflict (id_iscrizione) do update
+        set allergie_intolleranze = excluded.allergie_intolleranze,
+            patologie_terapie = excluded.patologie_terapie;
+    end if;
+
+    -- 8. Consensi
+    if jsonb_typeof(p_dto->'consensi') = 'array' then
+        delete from consenso where id_iscrizione = v_iscrizione_id;
+
+        for c in select * from jsonb_array_elements(p_dto->'consensi') loop
+            insert into consenso(event_id, id_iscrizione, id_tipo_consenso, valore)
+            values (v_event_id, v_iscrizione_id, (c->>'id_tipo_consenso')::int, (c->>'valore')::boolean)
+            on conflict do nothing;
+        end loop;
+    end if;
+
+    return v_iscrizione_id;
+end;
+$function$;
+
+alter function public.create_iscrizione(jsonb) security invoker;
+alter function public.update_iscrizione(jsonb, integer) security invoker;
+revoke all on function public.create_iscrizione(jsonb) from public, anon;
+revoke all on function public.update_iscrizione(jsonb, integer) from public, anon;
+grant execute on function public.create_iscrizione(jsonb) to authenticated;
+grant execute on function public.update_iscrizione(jsonb, integer) to authenticated;
 
 -- delete_iscrizione cancella righe di tabelle che il chiamante potrebbe non
 -- vedere (squadra, scheda sanitaria...): l'originale resta security definer
@@ -632,6 +892,8 @@ begin
       if not public.has_perm(v_event_id, 'iscritti.delete') then
         raise exception 'Permesso negato' using errcode = '42501';
       end if;
+      -- squadra_bambino -> bambino non ha "on delete cascade"
+      delete from public.squadra_bambino where id_bambino = p_id_bambino;
       return public.delete_iscrizione_interna(p_id_bambino);
     end
     $body$;
