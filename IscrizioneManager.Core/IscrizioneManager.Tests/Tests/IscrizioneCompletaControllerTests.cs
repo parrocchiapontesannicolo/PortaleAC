@@ -104,6 +104,47 @@ public sealed class IscrizioneCompletaControllerTests : IDisposable
     }
 
     [Fact]
+    public async Task UpdateAsync_GenitoriNonLeggibili_RifiutaSenzaChiamareRepo()
+    {
+        var dto = new ModuloIscrizioneDto { IdBambino = 5, Nome = "Mario", Cognome = "Rossi", GenitoriNonLeggibili = 1 };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => IscrizioneCompletaController.UpdateAsync(dto));
+
+        ex.Message.Should().Contain("genitore");
+        _repoMock.Verify(r => r.UpdateAsync(It.IsAny<ModuloIscrizioneDto>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_GenitoriTuttiLeggibili_ChiamaRepo()
+    {
+        _repoMock.Setup(r => r.UpdateAsync(It.IsAny<ModuloIscrizioneDto>())).ReturnsAsync(true);
+        var dto = new ModuloIscrizioneDto { IdBambino = 5, Nome = "Mario", Cognome = "Rossi" };
+
+        (await IscrizioneCompletaController.UpdateAsync(dto)).Should().BeTrue();
+        _repoMock.Verify(r => r.UpdateAsync(dto), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(1, "Un genitore")]
+    [InlineData(2, "2 genitori")]
+    public void MessaggioGenitoriNonLeggibili_SingolareEPlurale(int quanti, string atteso)
+    {
+        IscrizioneCompletaController.MessaggioGenitoriNonLeggibili(quanti).Should().StartWith(atteso);
+    }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    public void PagatoModificato_SoloSeCambiatoNelModulo(bool iniziale, bool attuale, bool atteso)
+    {
+        var dto = new ModuloIscrizioneDto { PagatoIniziale = iniziale, Pagato = attuale };
+
+        dto.PagatoModificato.Should().Be(atteso);
+    }
+
+    [Fact]
     public async Task GetAsync_InvalidId_ThrowsArgumentException()
     {
         await Assert.ThrowsAsync<ArgumentException>(() => IscrizioneCompletaController.GetAsync(0));

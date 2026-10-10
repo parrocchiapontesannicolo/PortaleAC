@@ -1,5 +1,6 @@
 @page "/iscritti/{IdBambino:int}"
 @using IscrizioneManager.Core.Repositories
+@implements IDisposable
 @inject AppState AppState
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
@@ -51,6 +52,13 @@
     }
     else
     {
+        @if (_modello.GenitoriNonLeggibili > 0)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-3">
+                @IscrizioneCompletaController.MessaggioGenitoriNonLeggibili(_modello.GenitoriNonLeggibili)
+            </MudAlert>
+        }
+
         <ModuloIscrizioneView @key="_versione" @ref="_modulo" FormModel="_modello" ReadOnly="!_inModifica" Disabled="_salvataggio" />
 
         @if (PuoModificare || PuoEliminare)
@@ -68,7 +76,7 @@
                     @if (!_inModifica)
                     {
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
-                                   OnClick="() => _inModifica = true">Modifica</MudButton>
+                                   Disabled="@(_modello.GenitoriNonLeggibili > 0)" OnClick="AvviaModifica">Modifica</MudButton>
                     }
                     else
                     {
@@ -103,9 +111,30 @@
     private bool _inModifica;
     private bool _salvataggio;
     private string? _errore;
+    private bool _uscitaConfermata;
+    private Func<Task<bool>>? _confermaUscita;
 
     private bool PuoModificare => AppState.Can(Permessi.IscrittiEdit);
     private bool PuoEliminare => AppState.Can(Permessi.IscrittiDelete);
+
+    protected override void OnInitialized()
+    {
+        // Cambio evento e logout dal layout non passano dal NavigationLock
+        _confermaUscita = ConfermaUscitaDalLayoutAsync;
+        AppState.ConfermaUscita = _confermaUscita;
+    }
+
+    public void Dispose()
+    {
+        if (AppState.ConfermaUscita == _confermaUscita)
+            AppState.ConfermaUscita = null;
+    }
+
+    private void AvviaModifica()
+    {
+        _inModifica = true;
+        _uscitaConfermata = false;
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -225,9 +254,27 @@
 
     private void TornaAllaLista() => Navigation.NavigateTo(Rotte.Iscritti);
 
+    private async Task<bool> ConfermaUscitaDalLayoutAsync()
+    {
+        if (_salvataggio)
+        {
+            Snackbar.Add("Salvataggio in corso: attendi che finisca.", Severity.Warning);
+            return false;
+        }
+        if (!_inModifica)
+            return true;
+
+        var esci = await DialogService.ShowMessageBoxAsync("Modifiche non salvate",
+            "Le modifiche non salvate andranno perse. Uscire comunque?",
+            yesText: "Esci", cancelText: "Resta");
+        // Se poi il layout naviga, il NavigationLock non chiede una seconda volta
+        _uscitaConfermata = esci == true;
+        return _uscitaConfermata;
+    }
+
     private async Task ConfermaUscitaAsync(LocationChangingContext contesto)
     {
-        if (!_inModifica)
+        if (!_inModifica || _uscitaConfermata)
             return;
 
         var esci = await DialogService.ShowMessageBoxAsync("Uscire senza salvare?",

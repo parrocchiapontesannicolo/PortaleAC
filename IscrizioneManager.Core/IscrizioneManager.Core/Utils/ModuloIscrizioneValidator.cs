@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using IscrizioneManager.Core.Models;
 
 namespace IscrizioneManager.Core.Utils
 {
@@ -10,7 +11,11 @@ namespace IscrizioneManager.Core.Utils
   {
     private static readonly Regex EmailRegex = new(@"^[^@\s]+@[^@\s]+\.[^@\s]+$", RegexOptions.Compiled);
 
-    public static string Validate(ModuloIscrizioneDto modulo)
+    /// <summary>
+    /// Con <paramref name="meta"/> i controlli sui dati seguono le sezioni visibili:
+    /// un campo nascosto dall'evento non deve bloccare il salvataggio (dati della v1).
+    /// </summary>
+    public static string Validate(ModuloIscrizioneDto modulo, EventoMetadata? meta = null)
     {
       var errors = "";
       if (string.IsNullOrWhiteSpace(modulo.Cognome))
@@ -37,17 +42,28 @@ namespace IscrizioneManager.Core.Utils
         }
       }
 
-      if (!IsEmailValida(modulo.EmailGenitore))
+      if (meta?.View_MailGenitore != false && !IsEmailValida(modulo.EmailGenitore))
         errors += "L'indirizzo 'Email genitore' non è valido.\n";
 
-      foreach (var settimana in SettimaneModulo.SceltaDoppia(modulo.Settimane))
-        errors += $"Settimana '{settimana}': scegli solo 'con pranzo' oppure 'senza pranzo'.\n";
+      if (meta?.View_Settimane != false)
+      {
+        foreach (var settimana in SettimaneModulo.SceltaDoppia(modulo.Settimane))
+          errors += $"Settimana '{settimana}': scegli solo 'con pranzo' oppure 'senza pranzo'.\n";
+      }
 
       return errors;
     }
 
-    /// <summary>Vuota = valida (il campo non è obbligatorio).</summary>
-    public static bool IsEmailValida(string? email) =>
-      string.IsNullOrWhiteSpace(email) || EmailRegex.IsMatch(email.Trim());
+    /// <summary>
+    /// Vuota = valida (il campo non è obbligatorio). Accetta anche più indirizzi
+    /// separati da ';' o ',', come nei dati inseriti con la v1.
+    /// </summary>
+    public static bool IsEmailValida(string? email)
+    {
+      if (string.IsNullOrWhiteSpace(email))
+        return true;
+      var indirizzi = email.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+      return indirizzi.Length > 0 && indirizzi.All(indirizzo => EmailRegex.IsMatch(indirizzo));
+    }
   }
 }

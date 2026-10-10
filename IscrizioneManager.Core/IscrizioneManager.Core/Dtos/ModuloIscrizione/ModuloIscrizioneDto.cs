@@ -36,6 +36,20 @@ public class ModuloIscrizioneDto
   /// <summary>Salvato a parte con la RPC set_pagato (non fa parte di create/update_iscrizione).</summary>
   public bool Pagato { get; set; }
 
+  /// <summary>
+  /// Valore di "pagato" letto dal database: al salvataggio set_pagato parte solo
+  /// se l'utente l'ha cambiato, così non si annulla un pagamento segnato da altri.
+  /// </summary>
+  public bool PagatoIniziale { get; set; }
+
+  public bool PagatoModificato => Pagato != PagatoIniziale;
+
+  /// <summary>
+  /// Genitori collegati che non è stato possibile leggere (permessi): salvare
+  /// cancellerebbe i collegamenti, quindi il salvataggio viene rifiutato.
+  /// </summary>
+  public int GenitoriNonLeggibili { get; set; }
+
   // Altri flag
   public bool DaIscrivereAlNoi { get; set; }
   public bool AltraParrocchia { get; set; }

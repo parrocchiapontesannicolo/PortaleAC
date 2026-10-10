@@ -1,3 +1,4 @@
+using IscrizioneManager.Core.Models;
 using IscrizioneManager.Core.Utils;
 
 namespace IscrizioneManager.Tests.Tests;
@@ -131,6 +132,10 @@ public class ModuloIscrizioneValidatorTests
     [InlineData("mario.rossi", false)]
     [InlineData("mario@", false)]
     [InlineData("mario @example.com", false)]
+    [InlineData("mario@x.it; anna@y.it", true)]
+    [InlineData("mario@x.it, anna@y.it;", true)]
+    [InlineData("mario@x.it; anna", false)]
+    [InlineData(" ; ", false)]
     public void IsEmailValida(string? email, bool attesa)
     {
         ModuloIscrizioneValidator.IsEmailValida(email).Should().Be(attesa);
@@ -155,5 +160,45 @@ public class ModuloIscrizioneValidatorTests
         dto.Settimane.ForEach(s => s.IsSelected = true);
 
         ModuloIscrizioneValidator.Validate(dto).Should().Contain("Settimana 1");
+    }
+
+    private static ModuloIscrizioneDto DtoConDatiV1()
+    {
+        var dto = ValidDto();
+        dto.EmailGenitore = "non-una-mail";
+        dto.Settimane = SettimaneModulo.Espandi(new[]
+        {
+            new Settimana { Id = 3, Desc = "Settimana 1", CostoIntero = 60, CostoBase = 45 }
+        });
+        dto.Settimane.ForEach(s => s.IsSelected = true);
+        return dto;
+    }
+
+    [Fact]
+    public void Validate_SezioniNascoste_IgnoraEmailESettimane()
+    {
+        var meta = new EventoMetadata { View_MailGenitore = false, View_Settimane = false };
+
+        ModuloIscrizioneValidator.Validate(DtoConDatiV1(), meta).Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Validate_SezioniVisibili_ControllaEmailESettimane()
+    {
+        var meta = new EventoMetadata { View_MailGenitore = true, View_Settimane = true };
+
+        var result = ModuloIscrizioneValidator.Validate(DtoConDatiV1(), meta);
+
+        result.Should().Contain("Email genitore").And.Contain("Settimana 1");
+    }
+
+    [Fact]
+    public void Validate_SezioniNascoste_CampiObbligatoriRestano()
+    {
+        var dto = DtoConDatiV1();
+        dto.Nome = null;
+        var meta = new EventoMetadata { View_MailGenitore = false, View_Settimane = false };
+
+        ModuloIscrizioneValidator.Validate(dto, meta).Should().Contain("Nome");
     }
 }
