@@ -100,6 +100,7 @@ else
     protected override async Task OnInitializedAsync()
     {
         AppState.Changed += OnStateChanged;
+        AppState.SessioneTerminata += OnSessioneTerminata;
         _darkMode = await Storage.GetItem(DarkModeKey) == "1";
     }
 
@@ -111,6 +112,13 @@ else
 
     private async Task CambiaEvento(int eventId)
     {
+        if (eventId == AppState.EventoCorrente?.EventId)
+            return;
+        // Il cambio evento ricrea la pagina senza navigare: la NavigationLock
+        // non scatta, quindi le pagine con modifiche aperte confermano qui.
+        if (AppState.ConfermaUscita != null && !await AppState.ConfermaUscita())
+            return;
+
         try
         {
             await AppState.SelezionaEventoAsync(eventId);
@@ -130,11 +138,24 @@ else
 
     private async Task Logout()
     {
+        if (AppState.ConfermaUscita != null && !await AppState.ConfermaUscita())
+            return;
+
         await AuthService.SignOutAsync();
         Navigation.NavigateTo(Rotte.Login);
     }
 
     private void OnStateChanged() => InvokeAsync(StateHasChanged);
 
-    public void Dispose() => AppState.Changed -= OnStateChanged;
+    private void OnSessioneTerminata() => InvokeAsync(() =>
+    {
+        Snackbar.Add("Sessione scaduta, accedi di nuovo", Severity.Warning);
+        Navigation.NavigateTo(Rotte.Login);
+    });
+
+    public void Dispose()
+    {
+        AppState.Changed -= OnStateChanged;
+        AppState.SessioneTerminata -= OnSessioneTerminata;
+    }
 }
