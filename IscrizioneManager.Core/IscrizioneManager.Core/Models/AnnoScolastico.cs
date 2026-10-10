@@ -10,7 +10,7 @@ namespace IscrizioneManager.Core.Models
     public int? Id { get; set; }
 
     [Column("desc")]
-    public string Desc { get; set; }
+    public string Desc { get; set; } = string.Empty;
 
     [Column("grado_scuola")]
     public int GradoScuola { get; set; }

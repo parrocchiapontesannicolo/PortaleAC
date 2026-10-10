@@ -1,0 +1,239 @@
+@page "/iscritti/{IdBambino:int}"
+@using IscrizioneManager.Core.Repositories
+@inject AppState AppState
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>@(_modello?.NomeCompleto ?? "Iscritto") - Portale AC</PageTitle>
+
+<PaginaProtetta Permessi="@(new[] { Permessi.IscrittiView, Permessi.IscrittiEdit })">
+    <NavigationLock OnBeforeInternalNavigation="ConfermaUscitaAsync" ConfirmExternalNavigation="_inModifica" />
+
+    <div class="d-flex align-center flex-wrap gap-1 mb-3">
+        <MudTooltip Text="Torna alla lista">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="TornaAllaLista" aria-label="Torna alla lista" />
+        </MudTooltip>
+        <MudText Typo="Typo.h5" Class="flex-grow-1" Style="min-width: 0; overflow: hidden; text-overflow: ellipsis">
+            @(_modello?.NomeCompleto ?? "Iscritto")
+        </MudText>
+        @if (_modello != null && !_caricamento)
+        {
+            @if (_inModifica)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Info" Icon="@Icons.Material.Filled.Edit">In modifica</MudChip>
+            }
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                     Color="@(_modello.Pagato ? Color.Success : Color.Warning)"
+                     Icon="@(_modello.Pagato ? Icons.Material.Filled.CheckCircle : Icons.Material.Outlined.PendingActions)">
+                @(_modello.Pagato ? "Pagato" : "Da pagare")
+            </MudChip>
+        }
+    </div>
+
+    @if (_caricamento)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" />
+        <MudStack Spacing="3">
+            @for (var i = 0; i < 3; i++)
+            {
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="140px" />
+            }
+        </MudStack>
+    }
+    else if (_errore != null || _modello == null)
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-3">@_errore</MudAlert>
+        <MudStack Row="true" Spacing="2">
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Refresh" OnClick="() => CaricaAsync(true)">Riprova</MudButton>
+            <MudButton Variant="Variant.Text" Href="@Rotte.Iscritti">Torna alla lista</MudButton>
+        </MudStack>
+    }
+    else
+    {
+        <ModuloIscrizioneView @key="_versione" @ref="_modulo" FormModel="_modello" ReadOnly="!_inModifica" Disabled="_salvataggio" />
+
+        @if (PuoModificare || PuoEliminare)
+        {
+            <MudPaper Elevation="4" Class="d-flex align-center flex-wrap gap-2 pa-2 mt-3"
+                      Style="position: sticky; bottom: 8px; z-index: 5">
+                @if (PuoEliminare)
+                {
+                    <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Outlined.Delete"
+                               Disabled="_salvataggio" OnClick="EliminaAsync">Elimina</MudButton>
+                }
+                <MudSpacer />
+                @if (PuoModificare)
+                {
+                    @if (!_inModifica)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Edit"
+                                   OnClick="() => _inModifica = true">Modifica</MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Text" Disabled="_salvataggio" OnClick="AnnullaModificheAsync">Annulla</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_salvataggio" OnClick="SalvaAsync"
+                                   StartIcon="@(_salvataggio ? null : Icons.Material.Filled.Save)">
+                            @if (_salvataggio)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <span>Salvataggio…</span>
+                            }
+                            else
+                            {
+                                <span>Salva</span>
+                            }
+                        </MudButton>
+                    }
+                }
+            </MudPaper>
+        }
+    }
+</PaginaProtetta>
+
+@code {
+    [Parameter] public int IdBambino { get; set; }
+
+    private ModuloIscrizioneDto? _modello;
+    private ModuloIscrizioneView? _modulo;
+    private int _versione;
+    private int? _idCaricato;
+    private bool _caricamento = true;
+    private bool _inModifica;
+    private bool _salvataggio;
+    private string? _errore;
+
+    private bool PuoModificare => AppState.Can(Permessi.IscrittiEdit);
+    private bool PuoEliminare => AppState.Can(Permessi.IscrittiDelete);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_idCaricato == IdBambino || !AppState.IsAuthenticated || !AppState.HasEvento)
+            return;
+
+        _idCaricato = IdBambino;
+        _inModifica = false;
+        await CaricaAsync(true);
+    }
+
+    /// <summary>Ricarica dal server. Senza indicatore di caricamento sostituisce solo i dati del modulo.</summary>
+    private async Task CaricaAsync(bool mostraCaricamento)
+    {
+        if (mostraCaricamento)
+            _caricamento = true;
+        _errore = null;
+        try
+        {
+            _modello = await IscrizioneCompletaController.GetAsync(IdBambino);
+        }
+        catch (Exception ex)
+        {
+            if (mostraCaricamento)
+                _errore = ex.Message;
+            else
+                Snackbar.Add($"Impossibile ricaricare l'iscrizione: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _caricamento = false;
+        }
+    }
+
+    private async Task SalvaAsync()
+    {
+        if (_salvataggio || _modulo == null || _modello == null)
+            return;
+
+        if (!await _modulo.ValidaAsync())
+        {
+            Snackbar.Add("Controlla i campi evidenziati prima di salvare.", Severity.Warning);
+            return;
+        }
+
+        _salvataggio = true;
+        try
+        {
+            if (await IscrizioneCompletaController.UpdateAsync(_modello))
+            {
+                Snackbar.Add("Modifiche salvate", Severity.Success);
+                _inModifica = false;
+                await CaricaAsync(false);
+            }
+            else
+            {
+                Snackbar.Add("Il server non ha confermato il salvataggio: ricarica la pagina e verifica i dati.", Severity.Warning);
+            }
+        }
+        catch (PagatoNonAggiornatoException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            _inModifica = false;
+            await CaricaAsync(false);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore durante il salvataggio: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _salvataggio = false;
+        }
+    }
+
+    private async Task AnnullaModificheAsync()
+    {
+        _inModifica = false;
+        await CaricaAsync(false);
+        _versione++;
+    }
+
+    private async Task EliminaAsync()
+    {
+        if (_modello == null || _salvataggio)
+            return;
+
+        var conferma = await DialogService.ShowMessageBoxAsync("Eliminare l'iscrizione?",
+            $"L'iscrizione di {_modello.NomeCompleto} e tutti i dati collegati verranno eliminati definitivamente. L'operazione non si può annullare.",
+            yesText: "Elimina", cancelText: "Annulla");
+        if (conferma != true)
+            return;
+
+        _salvataggio = true;
+        try
+        {
+            if (await IscrizioneCompletaController.DeleteAsync(IdBambino))
+            {
+                Snackbar.Add($"Iscrizione di {_modello.NomeCompleto} eliminata", Severity.Success);
+                _inModifica = false;
+                Navigation.NavigateTo(Rotte.Iscritti);
+            }
+            else
+            {
+                Snackbar.Add("Il server non ha confermato l'eliminazione: ricarica la lista e verifica.", Severity.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Errore durante l'eliminazione: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _salvataggio = false;
+        }
+    }
+
+    private void TornaAllaLista() => Navigation.NavigateTo(Rotte.Iscritti);
+
+    private async Task ConfermaUscitaAsync(LocationChangingContext contesto)
+    {
+        if (!_inModifica)
+            return;
+
+        var esci = await DialogService.ShowMessageBoxAsync("Uscire senza salvare?",
+            "Le modifiche non salvate andranno perse.",
+            yesText: "Esci", cancelText: "Resta");
+        if (esci != true)
+            contesto.PreventNavigation();
+    }
+}

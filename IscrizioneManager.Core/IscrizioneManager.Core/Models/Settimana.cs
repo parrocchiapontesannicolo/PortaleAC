@@ -26,4 +26,9 @@ public class Settimana : EventModel
 
   [NotMapped]
   public bool IsSelected { get; set; }
+
+  /// <summary>Descrizione della settimana senza "(Con/Senza pranzo)", per raggruppare le varianti.</summary>
+  [NotMapped]
+  [Newtonsoft.Json.JsonIgnore]
+  public string? DescBase { get; set; }
 }

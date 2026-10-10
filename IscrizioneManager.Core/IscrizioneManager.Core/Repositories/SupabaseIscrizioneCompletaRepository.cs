@@ -1,7 +1,7 @@
 using IscrizioneManager.Core.Services;
+using IscrizioniManager.Controllers;
 using IscrizioniManager.Models;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using static Supabase.Postgrest.Constants;
 
 namespace IscrizioneManager.Core.Repositories;
 
@@ -55,16 +55,13 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             }
         };
 
-        try
-        {
-            var bambinoId = await ClientHolder.Client.Rpc<int>("create_iscrizione", payload);
-            return bambinoId != default;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Errore CreateAsync: {ex.Message}");
-            throw;
-        }
+        var bambinoId = await ClientHolder.Client.Rpc<int>("create_iscrizione", payload);
+        if (bambinoId == default)
+            return false;
+
+        if (dto.Pagato)
+            await AllineaPagatoAsync(bambinoId, true);
+        return true;
     }
 
     public async Task<bool> UpdateAsync(ModuloIscrizioneDto dto)
@@ -116,170 +113,96 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             p_id_bambino = dto.IdBambino
         };
 
-        try
-        {
-            var bambinoId = await ClientHolder.Client.Rpc<int>("update_iscrizione", payload);
-            return bambinoId != default;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Errore UpdateAsync: {ex.Message}");
-            throw;
-        }
+        var bambinoId = await ClientHolder.Client.Rpc<int>("update_iscrizione", payload);
+        if (bambinoId == default)
+            return false;
+
+        await AllineaPagatoAsync(dto.IdBambino!.Value, dto.Pagato);
+        return true;
     }
 
     public async Task<bool> DeleteAsync(int idBambino)
     {
         var payload = new { p_id_bambino = idBambino };
-        try
-        {
-            var deletedId = await ClientHolder.Client.Rpc<int>("delete_iscrizione", payload);
-            return deletedId != default;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Errore DeleteAsync: {ex.Message}");
-            throw;
-        }
+        var deletedId = await ClientHolder.Client.Rpc<int>("delete_iscrizione", payload);
+        return deletedId != default;
     }
 
     public async Task<ModuloIscrizioneDto> GetAsync(int idBambino)
     {
-        var bambinoList = await ClientHolder.Client
-            .GetAll<Bambino>()
-            .Select("*")
-            .Where(x => x.Id == idBambino)
-            .Get();
+        var client = ClientHolder.Client;
 
-        var bambino = bambinoList.Models.FirstOrDefault();
-        if (bambino == null) throw new Exception();
+        var bambinoTask = client.GetAll<Bambino>().Select("*").Where(x => x.Id == idBambino).Get();
+        var iscrizioneTask = client.GetAll<Iscrizione>().Select("*").Where(x => x.IdBambino == idBambino).Get();
+        var relGenitoriTask = client.GetAll<GenitoreBambino>().Select("*").Where(x => x.IdBambino == idBambino).Get();
+        var tutteSettimaneTask = client.GetAll<Settimana>().Select("*").Get();
+        var tipiConsensoTask = client.GetAll<TipoConsenso>().Select("*").Get();
 
-        var iscrList = await ClientHolder.Client
-            .GetAll<Iscrizione>()
-            .Select("*")
-            .Where(x => x.IdBambino == idBambino)
-            .Get();
+        var bambino = (await bambinoTask).Models.FirstOrDefault()
+            ?? throw new InvalidOperationException("Iscritto non trovato: potrebbe essere stato eliminato o appartenere a un altro evento.");
+        var iscrizione = (await iscrizioneTask).Models.OrderByDescending(x => x.Id).FirstOrDefault()
+            ?? throw new InvalidOperationException($"Il bambino {bambino.Cognome} {bambino.Nome} non ha un'iscrizione in questo evento.");
 
-        var iscrizione = iscrList.Models.FirstOrDefault();
-        if (iscrizione == null) throw new Exception();
+        var idIscrizione = iscrizione.Id;
+        var settimaneSceltaTask = client.GetAll<IscrizioneSettimana>().Select("*").Where(x => x.IdIscrizione == idIscrizione).Get();
+        var tagliaTask = client.GetAll<IscrizioneTaglia>().Select("*").Where(x => x.IdIscrizione == idIscrizione).Get();
+        var schedaTask = client.GetAll<SchedaSanitaria>().Select("*").Where(x => x.IdIscrizione == idIscrizione).Get();
+        var consensiTask = client.GetAll<Consenso>().Select("*").Where(x => x.IdIscrizione == idIscrizione).Get();
 
-        var relGenitoriList = await ClientHolder.Client
-            .GetAll<GenitoreBambino>()
-            .Select("*")
-            .Where(x => x.IdBambino == idBambino)
-            .Get();
-
-        var genitoriDto = new List<GenitoreDto>();
-        foreach (var rel in relGenitoriList.Models)
+        // Genitori: una sola query per id. Niente filtro sull'evento: in passato si potevano
+        // collegare genitori di altri eventi e filtrarli li farebbe perdere al salvataggio.
+        var idGenitori = (await relGenitoriTask).Models.Select(r => r.IdGenitore).Distinct().ToList();
+        var genitori = new List<Genitore>();
+        if (idGenitori.Count > 0)
         {
-            var gen = await ClientHolder.Client
-                .BaseFrom<Genitore>()
+            genitori = (await client.BaseFrom<Genitore>()
                 .Select("*")
-                .Where(x => x.Id == rel.IdGenitore)
-                .Single();
-
-            if (gen != null)
-            {
-                genitoriDto.Add(new GenitoreDto
-                {
-                    IdGenitore = gen.Id,
-                    Nome = gen.Nome,
-                    Cognome = gen.Cognome,
-                    Telefono = gen.Telefono,
-                    Genere = gen.Genere
-                });
-            }
+                .Filter("id_genitore", Operator.In, idGenitori.Cast<object>().ToList())
+                .Get()).Models;
         }
 
-        var settimaneList = await ClientHolder.Client
-            .GetAll<IscrizioneSettimana>()
-            .Select("*")
-            .Where(x => x.IdIscrizione == iscrizione.Id)
-            .Get();
-
-        var ids = settimaneList.Models.Select(s => s.IdSettimana).ToList();
-
-        var settimane = await ClientHolder.Client
-            .GetAll<Settimana>()
-            .Filter("id_settimana", Supabase.Postgrest.Constants.Operator.In, ids)
-            .Get();
-
-        var tagliaList = await ClientHolder.Client
-            .GetAll<IscrizioneTaglia>()
-            .Select("*")
-            .Where(x => x.IdIscrizione == iscrizione.Id)
-            .Get();
-
-        var idTaglia = tagliaList.Models.FirstOrDefault()?.IdTaglia;
-
-        var schedaList = await ClientHolder.Client
-            .GetAll<SchedaSanitaria>()
-            .Select("*")
-            .Where(x => x.IdIscrizione == iscrizione.Id)
-            .Get();
-
-        var scheda = schedaList.Models.FirstOrDefault();
-
-        var consensiList = await ClientHolder.Client
-            .GetAll<Consenso>()
-            .Select("*")
-            .Where(x => x.IdIscrizione == iscrizione.Id)
-            .Get();
-
-        var tipiConsensiList = await ClientHolder.Client
-            .GetAll<TipoConsenso>()
-            .Select("*")
-            .Get();
-
-        var consensiDto = consensiList.Models.Select(c => new ConsensoDto
-        {
-            IdTipoConsenso = c.IdTipoConsenso,
-            IsSelected = c.Valore,
-            Descrizione = tipiConsensiList.Models.FirstOrDefault(t => t.Id == c.IdTipoConsenso)?.Descrizione
-        }).ToList();
-
-        var tutteSettimane = await ClientHolder.Client
-            .GetAll<Settimana>()
-            .Select("*")
-            .Get();
-
-        var result = new List<Settimana>();
-        foreach (var t in settimane.Models)
-        {
-            if (t.CostoIntero != null)
+        var genitoriDto = idGenitori
+            .Select(id => genitori.FirstOrDefault(g => g.Id == id))
+            .Where(g => g != null)
+            .Select(g => new GenitoreDto
             {
-                result.Add(new Settimana
-                {
-                    Id = t.Id,
-                    Desc = $"{t.Desc} (Con pranzo)",
-                    CostoIntero = t.CostoIntero,
-                    CostoBase = null,
-                    DataInizio = t.DataInizio,
-                    DataFine = t.DataFine,
-                    IsSelected = settimaneList.Models.Any(x => x.Intero && x.IdSettimana == t.Id)
-                });
-            }
-            if (t.CostoBase != null)
+                IdGenitore = g!.Id,
+                Nome = g.Nome,
+                Cognome = g.Cognome,
+                Telefono = g.Telefono,
+                Genere = g.Genere,
+                Existing = true
+            })
+            .ToList();
+
+        var scheda = (await schedaTask).Models.FirstOrDefault();
+        var idTaglia = (await tagliaTask).Models.FirstOrDefault()?.IdTaglia;
+
+        // Tutti i tipi di consenso dell'evento, con il valore registrato (se c'è)
+        var consensi = (await consensiTask).Models;
+        var tipiConsenso = (await tipiConsensoTask).Models;
+        var consensiDto = tipiConsenso
+            .OrderBy(t => t.Id)
+            .Select(t => new ConsensoDto
             {
-                result.Add(new Settimana
-                {
-                    Id = -t.Id,
-                    Desc = $"{t.Desc} (Senza pranzo)",
-                    CostoIntero = null,
-                    CostoBase = t.CostoBase,
-                    DataInizio = t.DataInizio,
-                    DataFine = t.DataFine,
-                    IsSelected = settimaneList.Models.Any(x => !x.Intero && x.IdSettimana == t.Id)
-                });
-            }
-        }
+                IdTipoConsenso = t.Id,
+                Descrizione = t.Descrizione,
+                IsSelected = consensi.Any(c => c.IdTipoConsenso == t.Id && c.Valore)
+            })
+            .Concat(consensi
+                .Where(c => tipiConsenso.All(t => t.Id != c.IdTipoConsenso))
+                .Select(c => new ConsensoDto { IdTipoConsenso = c.IdTipoConsenso, IsSelected = c.Valore }))
+            .ToList();
+
+        // Tutte le settimane dell'evento (non solo quelle scelte), così in modifica se ne possono aggiungere
+        var settimane = SettimaneModulo.Espandi((await tutteSettimaneTask).Models, (await settimaneSceltaTask).Models);
 
         return new ModuloIscrizioneDto
         {
             IdBambino = bambino.Id,
             Nome = bambino.Nome,
             Cognome = bambino.Cognome,
-            DataNascita = DateTime.Parse(bambino.DataNascita),
+            DataNascita = IscrittiListaController.ParseData(bambino.DataNascita),
             Genere = bambino.Genere,
             LuogoNascita = bambino.LuogoNascita,
             IndirizzoResidenza = bambino.IndirizzoResidenza,
@@ -288,7 +211,7 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             AnnoScolastico = iscrizione.Anno,
             Note = iscrizione.Note,
             Genitori = genitoriDto,
-            Settimane = result,
+            Settimane = settimane,
             Taglia = idTaglia,
             AllergieIntolleranze = scheda?.AllergieIntolleranze,
             PatologieTerapie = scheda?.PatologieTerapie,
@@ -297,6 +220,7 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             AltraParrocchia = iscrizione.AltraParrocchia,
             ModalitaPagamentoSelezionata = iscrizione.ModalitaPagamento,
             FormatoIscrizioneSelezionato = iscrizione.FormatoIscrizione,
+            Pagato = iscrizione.Pagato,
             ScontoFratelli = iscrizione.ScontoFratelli,
             Ricevuta = iscrizione.Ricevuta,
             DescRicevuta = iscrizione.DescRicevuta,
@@ -305,5 +229,28 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             EmailGenitore = iscrizione.EmailGenitore,
             Priority = iscrizione.Priority ?? false
         };
+    }
+
+    /// <summary>
+    /// Il flag "pagato" non passa da create/update_iscrizione: lo allinea con
+    /// set_pagato solo se il valore sul database è diverso.
+    /// </summary>
+    private static async Task AllineaPagatoAsync(int idBambino, bool pagato)
+    {
+        try
+        {
+            var iscrizione = (await ClientHolder.Client
+                .GetAll<Iscrizione>()
+                .Select("*")
+                .Where(x => x.IdBambino == idBambino)
+                .Get()).Models.OrderByDescending(x => x.Id).FirstOrDefault();
+
+            if (iscrizione != null && iscrizione.Pagato != pagato)
+                await IscrittiListaController.AggiornaPagatoAsync(iscrizione.Id, pagato);
+        }
+        catch (Exception ex)
+        {
+            throw new PagatoNonAggiornatoException(ex);
+        }
     }
 }
