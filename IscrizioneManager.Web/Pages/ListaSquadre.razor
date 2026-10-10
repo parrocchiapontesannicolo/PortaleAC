@@ -1,133 +1,597 @@
 @page "/squadre"
 @using IscrizioneManager.Web.Sortable
+@using IscrizioneManager.Web.Pages.Squadre
 @using IscrizioniManager.Models
-@using IscrizioneManager.Core.Services
-@using IscrizioneManager.Core.Models
 @using IscrizioneManager.Core.Logic
-@inject NavigationManager Navigation
 @inject AppState AppState
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IJSRuntime JS
 
+<PageTitle>Squadre - Portale AC</PageTitle>
 <link href="css/ListaSquadre.css" rel="stylesheet" />
 
-<LoadingView @ref="LoadingOverlay" />
+<PaginaProtetta Permessi="@(new[] { Permessi.SquadreView, Permessi.SquadreEdit })">
+    <div class="squadre-pagina">
+        <div class="squadre-intestazione mb-2">
+            <div>
+                <MudText Typo="Typo.h5">Squadre</MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@AppState.EventoCorrente?.Nome</MudText>
+            </div>
+            @if (!_caricamento && _errore is null)
+            {
+                <div class="squadre-statistiche">
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Outlined.Groups" Variant="Variant.Outlined">
+                        @SquadreReali.Count() squadre
+                    </MudChip>
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Outlined.ChildCare" Variant="Variant.Outlined">
+                        @TotaleBambini bambini
+                    </MudChip>
+                    @if (NumeroSenzaSquadra > 0)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Outlined.PersonOff">
+                            @NumeroSenzaSquadra senza squadra
+                        </MudChip>
+                    }
+                    @if (SquadreReali.Any())
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="no-print">
+                            @DescrizioneBilanciamento
+                        </MudChip>
+                    }
+                    @if (!_puoModificare)
+                    {
+                        <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Outlined.Visibility" Variant="Variant.Text" Class="no-print">
+                            Sola lettura
+                        </MudChip>
+                    }
+                </div>
+            }
+        </div>
 
-<div class="header-iscrizione">
-    <h2>Squadre</h2>
-    <div class="editing-buttons">
-        @if (isSaving)
+        <MudPaper Class="squadre-toolbar pa-2 mb-3 no-print" Elevation="2">
+            <div class="squadre-toolbar-riga">
+                <MudTextField T="string" Value="_ricerca" ValueChanged="OnRicercaChanged"
+                              Placeholder="Cerca un bambino…" Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" Clearable="true"
+                              Immediate="true" DebounceInterval="200" Variant="Variant.Outlined"
+                              Margin="Margin.Dense" Class="squadre-ricerca" Disabled="_caricamento" />
+
+                <div class="squadre-azioni">
+                    @if (_salvataggiInCorso > 0)
+                    {
+                        <span class="squadre-salvataggio">
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" />
+                            <span class="d-none d-sm-inline">Salvataggio…</span>
+                        </span>
+                    }
+
+                    <MudTooltip Text="@(TutteEspanse ? "Comprimi tutte" : "Espandi tutte")">
+                        <MudIconButton Icon="@(TutteEspanse ? Icons.Material.Filled.UnfoldLess : Icons.Material.Filled.UnfoldMore)"
+                                       OnClick="EspandiComprimiTutte" Disabled="_caricamento"
+                                       aria-label="@(TutteEspanse ? "Comprimi tutte" : "Espandi tutte")" />
+                    </MudTooltip>
+                    <MudTooltip Text="Stampa">
+                        <MudIconButton Icon="@Icons.Material.Filled.Print" OnClick="StampaAsync" Disabled="_caricamento" aria-label="Stampa" />
+                    </MudTooltip>
+
+                    @if (_puoModificare)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                                   OnClick="NuovaSquadraAsync" Disabled="_caricamento" Class="d-none d-sm-flex">
+                            Nuova squadra
+                        </MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Secondary" StartIcon="@Icons.Material.Filled.Shuffle"
+                                   OnClick="RidistribuisciAsync" Disabled="@(_caricamento || !SquadreReali.Any() || _salvataggiInCorso > 0)"
+                                   Class="d-none d-sm-flex">
+                            Ridistribuisci
+                        </MudButton>
+
+                        <MudTooltip Text="Nuova squadra" RootClass="d-flex d-sm-none">
+                            <MudIconButton Icon="@Icons.Material.Filled.GroupAdd" Color="Color.Primary"
+                                           OnClick="NuovaSquadraAsync" Disabled="_caricamento" aria-label="Nuova squadra" />
+                        </MudTooltip>
+                        <MudTooltip Text="Ridistribuisci automaticamente" RootClass="d-flex d-sm-none">
+                            <MudIconButton Icon="@Icons.Material.Filled.Shuffle" Color="Color.Secondary"
+                                           OnClick="RidistribuisciAsync" Disabled="@(_caricamento || !SquadreReali.Any() || _salvataggiInCorso > 0)"
+                                           aria-label="Ridistribuisci automaticamente" />
+                        </MudTooltip>
+                    }
+                </div>
+            </div>
+            @if (RicercaAttiva && !_caricamento)
+            {
+                <MudText Typo="Typo.caption" Class="px-1 mud-text-secondary">
+                    @(NumeroRisultati == 0 ? "Nessun bambino trovato" : NumeroRisultati == 1 ? "1 bambino trovato" : $"{NumeroRisultati} bambini trovati")
+                </MudText>
+            }
+        </MudPaper>
+
+        @if (_caricamento && _squadre.Count == 0)
         {
-            <span class="saving-indicator">Salvataggio...</span>
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" />
+            <div class="squadre-griglia">
+                @for (var i = 0; i < 3; i++)
+                {
+                    <MudPaper Outlined="true" Class="squadra-card">
+                        <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="48px" />
+                        <div class="pa-3">
+                            <MudSkeleton Width="70%" />
+                            <MudSkeleton Width="55%" />
+                            <MudSkeleton Width="62%" />
+                        </div>
+                    </MudPaper>
+                }
+            </div>
         }
-        @if (!IsReadOnly)
+        else if (_errore is not null)
         {
-            <button class="btn-squadre" @onclick="RidistriubisciSquadre">Ridistribuisci automaticamente</button>
+            <MudAlert Severity="Severity.Error" Class="mb-3">
+                <div>Impossibile caricare le squadre: @_errore</div>
+                <MudButton Variant="Variant.Text" Color="Color.Error" StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="() => CaricaAsync()" Class="mt-1">Riprova</MudButton>
+            </MudAlert>
+        }
+        else
+        {
+            @if (_caricamento)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-2" />
+            }
+
+            @if (!SquadreReali.Any())
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-3 no-print">
+                    Non ci sono ancora squadre per questo evento.
+                    @if (_puoModificare)
+                    {
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                                   OnClick="NuovaSquadraAsync" Class="ml-1">Crea la prima squadra</MudButton>
+                    }
+                </MudAlert>
+            }
+
+            <div class="squadre-griglia">
+                @foreach (var s in SquadreInOrdine)
+                {
+                    var squadra = s;
+                    var coloreTesto = Squadra.TestoLeggibile(squadra.Color);
+                    var risultati = RicercaAttiva ? squadra.Bambini.Count(b => Squadra.Corrisponde(b, _ricerca)) : squadra.Bambini.Count;
+                    var aperta = squadra.IsExpanded || (RicercaAttiva && risultati > 0);
+
+                    <div class="@ClassiCard(squadra, risultati)" @key="squadra.Id">
+                        <MudPaper Outlined="true" Class="squadra-card">
+                            <div class="squadra-header" style="@($"background:{squadra.Color};color:{coloreTesto}")"
+                                 role="button" tabindex="0" aria-expanded="@(aperta ? "true" : "false")"
+                                 @onclick="() => Commuta(squadra)" @onkeydown="e => OnHeaderKeyDown(e, squadra)">
+                                <MudIcon Icon="@Icons.Material.Filled.ExpandMore" Size="Size.Small"
+                                         Class="@($"squadra-chevron no-print {(aperta ? "aperta" : "")}")" />
+                                <span class="squadra-nome">@squadra.Nome</span>
+                                <span class="squadra-conteggio" title="Bambini nella squadra">
+                                    @(RicercaAttiva ? $"{risultati}/{squadra.Bambini.Count}" : squadra.Bambini.Count.ToString())
+                                </span>
+                                @if (_puoModificare && !squadra.IsSenzaSquadra)
+                                {
+                                    <span class="no-print" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
+                                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true"
+                                                 Color="Color.Inherit" AriaLabel="@($"Azioni squadra {squadra.Nome}")"
+                                                 AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                                            <MudMenuItem Icon="@Icons.Material.Outlined.Edit" OnClick="() => ModificaSquadraAsync(squadra)">
+                                                Rinomina / colore
+                                            </MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Outlined.Delete" IconColor="Color.Error"
+                                                         OnClick="() => EliminaSquadraAsync(squadra)">
+                                                Elimina
+                                            </MudMenuItem>
+                                        </MudMenu>
+                                    </span>
+                                }
+                            </div>
+
+                            @if (squadra.Bambini.Count > 0)
+                            {
+                                <div class="squadra-anni">
+                                    @foreach (var c in squadra.ConteggiPerAnno())
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Class="ma-0">
+                                            @c.Descrizione: <b class="ml-1">@c.Numero</b>
+                                        </MudChip>
+                                    }
+                                </div>
+                            }
+
+                            <div class="squadra-body" hidden="@(!aperta)">
+                                @if (_puoModificare)
+                                {
+                                    <SortableList T="Bambino" Items="squadra.Bambini"
+                                                  Id="@IdLista(squadra)"
+                                                  Group="@GruppoTrascinamento"
+                                                  Sort="false"
+                                                  Filter=".no-drag"
+                                                  KeySelector="b => b.Id"
+                                                  EmptyText="@(squadra.IsSenzaSquadra ? "Tutti i bambini hanno una squadra" : "Trascina qui i bambini")"
+                                                  OnRemove="OnBambinoTrascinatoAsync"
+                                                  OnError="OnErroreTrascinamento"
+                                                  Context="bambino">
+                                        <SortableItemTemplate>
+                                            @RigaBambino(bambino, squadra)
+                                        </SortableItemTemplate>
+                                    </SortableList>
+                                }
+                                else if (squadra.Bambini.Count == 0)
+                                {
+                                    <div class="squadra-vuota">Nessun bambino</div>
+                                }
+                                else
+                                {
+                                    @foreach (var b in squadra.Bambini)
+                                    {
+                                        @RigaBambino(b, squadra)
+                                    }
+                                }
+
+                                @if (RicercaAttiva && risultati == 0 && squadra.Bambini.Count > 0)
+                                {
+                                    <div class="squadra-vuota no-print">Nessun risultato in questa squadra</div>
+                                }
+                            </div>
+                        </MudPaper>
+                    </div>
+                }
+            </div>
         }
     </div>
-    <button class="btn-chiudi" @onclick="TornaIndietro" title="Chiudi">×</button>
-</div>
-
-<div class="squadre-container">
-
-    @foreach (var s in Squadre)
-    {
-        <div class="squadra-card @(s.Id == 0 ? "full-width" : "")">
-            <div class="squadra-header"
-                 style="background-color:@s.Color; color:@GetTextColor(s.Color)"
-                 @onclick="() => s.IsExpanded = !s.IsExpanded">
-                <span>@s.Nome (@s.Bambini.Count)</span>
-                <span class="chevron @(s.IsExpanded ? "open" : "")">&#9658;</span>
-            </div>
-
-            <div class="squadra-body @(s.IsExpanded ? "" : "collapsed")">
-                @if (IsReadOnly)
-                {
-                    @foreach (var item in s.Bambini)
-                    {
-                        <div class="card has-border has-background-white squadra-item">
-                            <p class="is-size-4 p-2">@item.Cognome @item.Nome@(string.IsNullOrEmpty(item.AnnoDesc) ? "" : $" ({item.AnnoDesc})")</p>
-                        </div>
-                    }
-                }
-                else
-                {
-                    <SortableList Items="s.Bambini"
-                                  Group="bambiniGroup"
-                                  Id="@s.Id.ToString()"
-                                  OnRemove="@OnBambinoMoved"
-                                  Context="item">
-                        <SortableItemTemplate>
-                            <div class="card has-border has-background-white squadra-item">
-                                <p class="is-size-4 p-2">@item.Cognome @item.Nome@(string.IsNullOrEmpty(item.AnnoDesc) ? "" : $" ({item.AnnoDesc})")</p>
-                            </div>
-                        </SortableItemTemplate>
-                    </SortableList>
-                }
-            </div>
-        </div>
-    }
-
-</div>
+</PaginaProtetta>
 
 @code {
-    private LoadingView? LoadingOverlay;
+    private const string GruppoTrascinamento = "squadre-bambini";
 
-    private List<Squadra> Squadre = new();
-    private bool isSaving = false;
-    private bool IsReadOnly = false;
+    private List<Squadra> _squadre = new();
+    private bool _caricamento = true;
+    private string? _errore;
+    private bool _puoModificare;
+    private string _ricerca = string.Empty;
+    private string[] _paroleRicerca = Array.Empty<string>();
+    private int _salvataggiInCorso;
+
+    // I salvataggi degli spostamenti vanno in fila: due spostamenti rapidi dello
+    // stesso bambino non devono sovrapporsi sul database.
+    private readonly SemaphoreSlim _coda = new(1, 1);
+
+    private IEnumerable<Squadra> SquadreReali => _squadre.Where(s => !s.IsSenzaSquadra);
+    private Squadra? SenzaSquadra => _squadre.FirstOrDefault(s => s.IsSenzaSquadra);
+
+    // "Senza squadra" in cima solo se contiene bambini, altrimenti in fondo
+    private IEnumerable<Squadra> SquadreInOrdine =>
+        NumeroSenzaSquadra > 0
+            ? _squadre.Where(s => s.IsSenzaSquadra).Concat(SquadreReali)
+            : SquadreReali.Concat(_squadre.Where(s => s.IsSenzaSquadra));
+
+    private int TotaleBambini => _squadre.Sum(s => s.Bambini.Count);
+    private int NumeroSenzaSquadra => SenzaSquadra?.Bambini.Count ?? 0;
+    private bool RicercaAttiva => _paroleRicerca.Length > 0;
+    private int NumeroRisultati => _squadre.Sum(s => s.Bambini.Count(b => Squadra.Corrisponde(b, _ricerca)));
+    private bool TutteEspanse => _squadre.All(s => s.IsExpanded);
+
+    private string DescrizioneBilanciamento
+    {
+        get
+        {
+            var conteggi = SquadreReali.Select(s => s.Bambini.Count).ToList();
+            if (conteggi.Count == 0)
+                return string.Empty;
+            var min = conteggi.Min();
+            var max = conteggi.Max();
+            return min == max ? $"{min} per squadra" : $"da {min} a {max} per squadra";
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
-        LoadingOverlay?.Start();
-        Squadre = await SquadraBambinoController.GetSquadreAsync();
-        IsReadOnly = !AppState.Can(Permessi.SquadreEdit);
-        LoadingOverlay?.Stop();
+        _puoModificare = AppState.Can(Permessi.SquadreEdit);
+        if (!AppState.CanAny(Permessi.SquadreView, Permessi.SquadreEdit))
+        {
+            // PaginaProtetta mostra già il messaggio di accesso negato
+            _caricamento = false;
+            return;
+        }
+        await CaricaAsync();
     }
 
-    private async Task OnBambinoMoved((int oldIndex, int newIndex, int? from, int? to) indices)
+    private async Task CaricaAsync()
     {
-        int fromId = indices.from ?? 0;
-        int toId = indices.to ?? 0;
+        // Mantiene lo stato aperto/chiuso delle squadre tra un ricaricamento e l'altro
+        var espanse = _squadre.ToDictionary(s => s.Id, s => s.IsExpanded);
 
-        var fromSquadra = Squadre.Single(x => x.Id == fromId);
-        var toSquadra = Squadre.Single(x => x.Id == toId);
-        var bambino = fromSquadra.Bambini[indices.oldIndex];
-
-        toSquadra.Bambini.Insert(indices.newIndex, bambino);
-        fromSquadra.Bambini.Remove(bambino);
+        _caricamento = true;
+        _errore = null;
         StateHasChanged();
-
-        isSaving = true;
-        StateHasChanged();
-        await SquadraBambinoController.SetSquadraAsync(bambino.Id, toId);
-        isSaving = false;
-        StateHasChanged();
+        try
+        {
+            var squadre = await SquadraBambinoController.GetSquadreAsync();
+            foreach (var s in squadre)
+                if (espanse.TryGetValue(s.Id, out var aperta))
+                    s.IsExpanded = aperta;
+            _squadre = squadre;
+        }
+        catch (Exception ex)
+        {
+            _errore = ex.Message;
+        }
+        finally
+        {
+            _caricamento = false;
+        }
     }
 
-    private async Task RidistriubisciSquadre()
+    private RenderFragment RigaBambino(Bambino b, Squadra squadra) => __builder =>
     {
-        SquadraDistributor.Distribuisci(Squadre);
-        isSaving = true;
-        StateHasChanged();
-        await SquadraBambinoController.SaveAllAssignmentsAsync(Squadre);
-        isSaving = false;
-        StateHasChanged();
+        var trovato = RicercaAttiva && Squadra.Corrisponde(b, _ricerca);
+        var nascosto = RicercaAttiva && !trovato;
+        <div class="@($"bambino-riga {(nascosto ? "bambino-nascosto" : "")} {(trovato ? "bambino-trovato" : "")} {(_puoModificare ? "trascinabile" : "")}")">
+            @if (_puoModificare)
+            {
+                <MudIcon Icon="@Icons.Material.Filled.DragIndicator" Size="Size.Small" Class="bambino-maniglia no-print" />
+            }
+            <span class="bambino-nome">
+                @if (trovato)
+                {
+                    <MudHighlighter Text="@($"{b.Cognome} {b.Nome}")" HighlightedTexts="_paroleRicerca" />
+                }
+                else
+                {
+                    @($"{b.Cognome} {b.Nome}")
+                }
+            </span>
+            @if (!string.IsNullOrEmpty(b.AnnoDesc))
+            {
+                <span class="bambino-anno">@b.AnnoDesc</span>
+            }
+            @if (_puoModificare)
+            {
+                <span class="no-drag no-print">
+                    <MudIconButton Icon="@Icons.Material.Filled.SwapHoriz" Size="Size.Small"
+                                   OnClick="() => ScegliDestinazioneAsync(b, squadra)"
+                                   aria-label="@($"Sposta {b.Cognome} {b.Nome}")" />
+                </span>
+            }
+        </div>
+    };
+
+    private static string IdLista(Squadra s) => $"squadra-lista-{s.Id}";
+
+    private Squadra? DaIdLista(string? id) =>
+        id is not null && id.StartsWith("squadra-lista-") && int.TryParse(id.AsSpan("squadra-lista-".Length), out var squadraId)
+            ? _squadre.FirstOrDefault(s => s.Id == squadraId)
+            : null;
+
+    private string ClassiCard(Squadra s, int risultati)
+    {
+        var classi = "squadra-cella";
+        if (s.IsSenzaSquadra)
+            classi += " squadra-cella-larga";
+        if (s.IsSenzaSquadra && s.Bambini.Count == 0)
+            classi += " no-print";
+        if (RicercaAttiva && risultati == 0)
+            classi += " squadra-senza-risultati";
+        return classi;
     }
 
-    private void TornaIndietro()
+    private void OnRicercaChanged(string? valore)
     {
-        Navigation.NavigateTo("", true);
+        _ricerca = valore ?? string.Empty;
+        _paroleRicerca = Squadra.ParoleRicerca(_ricerca);
     }
 
-    private string GetTextColor(string hex)
+    private void Commuta(Squadra s) => s.IsExpanded = !s.IsExpanded;
+
+    private void OnHeaderKeyDown(KeyboardEventArgs e, Squadra s)
     {
-        if (string.IsNullOrWhiteSpace(hex) || hex.Length < 7 || !hex.StartsWith("#"))
-            return "#000000";
+        if (e.Key is "Enter" or " ")
+            Commuta(s);
+    }
 
-        int r = int.TryParse(hex.Substring(1, 2), System.Globalization.NumberStyles.HexNumber, null, out var rr) ? rr : 0;
-        int g = int.TryParse(hex.Substring(3, 2), System.Globalization.NumberStyles.HexNumber, null, out var gg) ? gg : 0;
-        int b = int.TryParse(hex.Substring(5, 2), System.Globalization.NumberStyles.HexNumber, null, out var bb) ? bb : 0;
+    private void EspandiComprimiTutte()
+    {
+        var espandi = !TutteEspanse;
+        foreach (var s in _squadre)
+            s.IsExpanded = espandi;
+    }
 
-        double luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        return luminance > 0.5 ? "#000000" : "#FFFFFF";
+    private async Task StampaAsync()
+    {
+        // In stampa si vedono tutte le squadre per intero
+        OnRicercaChanged(string.Empty);
+        foreach (var s in _squadre)
+            s.IsExpanded = true;
+        StateHasChanged();
+        await Task.Yield();
+        try
+        {
+            await JS.InvokeVoidAsync("print");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Stampa non disponibile: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task OnBambinoTrascinatoAsync((int oldIndex, int newIndex, string? from, string? to) e)
+    {
+        var da = DaIdLista(e.from);
+        var a = DaIdLista(e.to);
+        if (da is null || a is null || e.oldIndex < 0 || e.oldIndex >= da.Bambini.Count)
+        {
+            Snackbar.Add("Spostamento non riconosciuto: ricarico le squadre.", Severity.Warning);
+            await CaricaAsync();
+            return;
+        }
+
+        await SpostaAsync(da.Bambini[e.oldIndex], da, a, notifica: false);
+    }
+
+    private async Task ScegliDestinazioneAsync(Bambino b, Squadra attuale)
+    {
+        var parametri = new DialogParameters<SpostaBambinoDialog>
+        {
+            { x => x.NomeBambino, $"{b.Cognome} {b.Nome}" },
+            { x => x.SquadraAttualeId, attuale.Id },
+            { x => x.Squadre, SquadreReali.Concat(_squadre.Where(s => s.IsSenzaSquadra)).ToList() },
+        };
+        var dialog = await DialogService.ShowAsync<SpostaBambinoDialog>(null, parametri,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+        var esito = await dialog.Result;
+        if (esito is { Canceled: false, Data: int idDestinazione })
+        {
+            var destinazione = _squadre.FirstOrDefault(s => s.Id == idDestinazione);
+            if (destinazione is not null)
+                await SpostaAsync(b, attuale, destinazione, notifica: true);
+        }
+    }
+
+    private async Task SpostaAsync(Bambino b, Squadra da, Squadra a, bool notifica)
+    {
+        if (SquadraDistributor.Sposta(_squadre, b.Id, da.Id, a.Id) is null)
+            return;
+
+        _salvataggiInCorso++;
+        StateHasChanged();
+        await _coda.WaitAsync();
+        try
+        {
+            await SquadraBambinoController.SetSquadraAsync(b.Id, a.Id);
+            if (notifica)
+                Snackbar.Add($"{b.Cognome} {b.Nome} → {a.Nome}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Spostamento di {b.Cognome} {b.Nome} non salvato: {ex.Message}", Severity.Error);
+            await CaricaAsync();
+        }
+        finally
+        {
+            _coda.Release();
+            _salvataggiInCorso--;
+        }
+    }
+
+    private void OnErroreTrascinamento(Exception ex)
+    {
+        Snackbar.Add($"Trascinamento non disponibile ({ex.Message}). Usa il pulsante ⇄ accanto a ogni bambino.",
+            Severity.Warning, key: "errore-trascinamento");
+    }
+
+    private async Task RidistribuisciAsync()
+    {
+        var numeroSquadre = SquadreReali.Count();
+        if (numeroSquadre == 0)
+            return;
+
+        var conferma = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Ridistribuire tutti i bambini?",
+            MarkupMessage = new MarkupString(
+                $"Tutti i <b>{TotaleBambini}</b> bambini verranno distribuiti automaticamente tra le " +
+                $"<b>{numeroSquadre}</b> squadre, bilanciando per anno scolastico.<br /><br />" +
+                "<b>Tutte le assegnazioni attuali, comprese quelle fatte a mano, andranno perse.</b>"),
+            YesText = "Ridistribuisci",
+            CancelText = "Annulla",
+        });
+        if (conferma != true)
+            return;
+
+        _salvataggiInCorso++;
+        StateHasChanged();
+        await _coda.WaitAsync();
+        try
+        {
+            SquadraDistributor.Distribuisci(_squadre);
+            StateHasChanged();
+            await SquadraBambinoController.SaveAllAssignmentsAsync(_squadre);
+            Snackbar.Add("Squadre ridistribuite.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+            await CaricaAsync();
+        }
+        finally
+        {
+            _coda.Release();
+            _salvataggiInCorso--;
+        }
+    }
+
+    private async Task NuovaSquadraAsync()
+    {
+        var parametri = new DialogParameters<SquadraDialog>
+        {
+            { x => x.NomiEsistenti, SquadreReali.Select(s => s.Nome).ToList() },
+            { x => x.ColoriUsati, SquadreReali.Select(s => s.Color).ToList() },
+        };
+        await ApriDialogSquadraAsync(parametri, "Squadra creata.");
+    }
+
+    private async Task ModificaSquadraAsync(Squadra squadra)
+    {
+        var parametri = new DialogParameters<SquadraDialog>
+        {
+            { x => x.SquadraId, squadra.Id },
+            { x => x.Nome, squadra.Nome },
+            { x => x.Colore, squadra.Color },
+            { x => x.NomiEsistenti, SquadreReali.Where(s => s.Id != squadra.Id).Select(s => s.Nome).ToList() },
+        };
+        await ApriDialogSquadraAsync(parametri, "Squadra aggiornata.");
+    }
+
+    private async Task ApriDialogSquadraAsync(DialogParameters<SquadraDialog> parametri, string messaggio)
+    {
+        var dialog = await DialogService.ShowAsync<SquadraDialog>(null, parametri,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, BackdropClick = false });
+        var esito = await dialog.Result;
+        if (esito is { Canceled: false })
+        {
+            Snackbar.Add(messaggio, Severity.Success);
+            await CaricaAsync();
+        }
+    }
+
+    private async Task EliminaSquadraAsync(Squadra squadra)
+    {
+        var nome = System.Net.WebUtility.HtmlEncode(squadra.Nome);
+        var n = squadra.Bambini.Count;
+        var messaggio = n == 0
+            ? $"La squadra <b>{nome}</b> è vuota e verrà eliminata."
+            : $"La squadra <b>{nome}</b> contiene <b>{n}</b> {(n == 1 ? "bambino, che verrà spostato" : "bambini, che verranno spostati")} " +
+              $"in <b>{Squadra.NomeSenzaSquadra}</b>.";
+
+        var conferma = await DialogService.ShowMessageBoxAsync(new MessageBoxOptions
+        {
+            Title = "Eliminare la squadra?",
+            MarkupMessage = new MarkupString(messaggio),
+            YesText = "Elimina",
+            CancelText = "Annulla",
+        });
+        if (conferma != true)
+            return;
+
+        _salvataggiInCorso++;
+        StateHasChanged();
+        await _coda.WaitAsync();
+        try
+        {
+            await SquadraBambinoController.EliminaSquadraAsync(squadra.Id);
+            Snackbar.Add($"Squadra {squadra.Nome} eliminata.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Eliminazione non riuscita: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _coda.Release();
+            _salvataggiInCorso--;
+        }
+        await CaricaAsync();
     }
 }

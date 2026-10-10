@@ -1,256 +1,331 @@
-/* ======================= */
-/* HEADER ================= */
-/* ======================= */
-.header-iscrizione {
+/* Pagina Squadre (Pages/ListaSquadre.razor e dialog in Pages/Squadre) */
+
+.squadre-intestazione {
     display: flex;
-    align-items: center;
+    flex-wrap: wrap;
+    align-items: flex-end;
     justify-content: space-between;
-    margin: 0 2%;
-    margin-bottom: 15px;
+    gap: 8px;
 }
 
-    .header-iscrizione h2 {
+.squadre-statistiche {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+    .squadre-statistiche .mud-chip {
         margin: 0;
-        font-size: 2rem;
-        font-weight: 600;
     }
 
-.saving-indicator {
-    margin-right: 10px;
-    font-style: italic;
-    color: #888;
+/* Barra strumenti fissa sotto la barra in alto (densa) */
+.squadre-toolbar {
+    position: sticky;
+    top: calc(var(--mud-appbar-height) - var(--mud-appbar-height) / 4);
+    z-index: 5;
 }
 
-/* Close button */
-.btn-chiudi {
-    background: none;
-    border: none;
-    font-size: 3rem;
-    cursor: pointer;
-    line-height: 1;
-    padding: 0;
-    transition: color 0.2s, background-color 0.2s;
-    color: black;
+.squadre-toolbar-riga {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
 }
 
-    .btn-chiudi:hover {
-        color: darkred;
-    }
-
-@media (max-width: 768px) {
-    .header-iscrizione h2 {
-        font-size: 1.5rem;
-    }
-
-    .btn-chiudi {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        width: 56px;
-        height: 56px;
-        border-radius: 50%;
-        font-size: 2rem;
-        background-color: #1ABC9C;
-        color: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 2000;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    }
-
-        .btn-chiudi:hover {
-            background-color: #16a085;
-            color: white;
-        }
+.squadre-ricerca {
+    flex: 1 1 220px;
+    min-width: 0;
+    margin-top: 0 !important;
 }
 
-@media (max-width: 480px) {
-    .header-iscrizione h2 {
-        font-size: 1.25rem;
-    }
-
-    .btn-chiudi {
-        font-size: 1.75rem;
-    }
+.squadre-azioni {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-left: auto;
 }
 
-@media (prefers-color-scheme: dark) {
-    .btn-chiudi {
-        color: white;
-    }
+.squadre-salvataggio {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 4px;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.85rem;
 }
 
-/* ======================= */
-/* CONTAINER ============== */
-/* ======================= */
-.squadre-container {
+/* Griglia: una colonna sul telefono, poi quante ne stanno */
+.squadre-griglia {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
     gap: 16px;
-    padding: 0 2%;
     align-items: start;
 }
 
-@media (max-width: 768px) {
-    .squadre-container {
-        grid-template-columns: 1fr;
-    }
-}
-
-/* ======================= */
-/* SQUAD CARD ============= */
-/* ======================= */
-.squadra-card {
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    overflow: hidden;
-    background-color: #fff;
-    transition: box-shadow 0.2s;
-}
-
-    .squadra-card:hover {
-        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
-    }
-
-.squadra-card.full-width {
+.squadra-cella-larga {
     grid-column: 1 / -1;
 }
 
-/* ======================= */
-/* SQUAD HEADER =========== */
-/* ======================= */
-.squadra-header {
-    padding: 12px;
-    font-weight: bold;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    user-select: none;
-    -webkit-user-select: none;
+.squadra-senza-risultati {
+    opacity: 0.6;
 }
 
-/* ======================= */
-/* CHEVRON ================ */
-/* ======================= */
-.chevron {
-    display: inline-block;
-    font-size: 0.75em;
-    transition: transform 0.25s ease;
-}
-
-.chevron.open {
-    transform: rotate(90deg);
-}
-
-/* ======================= */
-/* COLLAPSIBLE BODY ======= */
-/* ======================= */
-.squadra-body {
-    max-height: 4000px;
+.squadra-card {
     overflow: hidden;
-    transition: max-height 0.3s ease;
 }
 
-.squadra-body.collapsed {
-    max-height: 0;
-}
-
-/* ======================= */
-/* DRAGGABLE ITEMS ======== */
-/* ======================= */
-.squadra-item {
-    cursor: grab;
+.squadra-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+    padding: 4px 8px 4px 12px;
+    font-weight: 600;
+    cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
-    padding-left: 1rem !important;
 }
 
-    .squadra-item:active {
-        cursor: grabbing;
+    .squadra-header:focus-visible {
+        outline: 3px solid var(--mud-palette-primary);
+        outline-offset: -3px;
     }
 
-/* Ghost class applied by SortableJS */
-.drag-ghost {
-    opacity: 0.4;
+.squadra-chevron {
+    transition: transform 0.2s ease;
+    transform: rotate(-90deg);
 }
 
-/* Bambini items (legacy list style) */
-.squadra-bambini {
-    list-style: none;
-    margin: 0;
+    .squadra-chevron.aperta {
+        transform: rotate(0deg);
+    }
+
+.squadra-nome {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1.05rem;
+}
+
+/* Contatore a pillola: eredita il colore del testo dell'intestazione */
+.squadra-conteggio {
+    flex: 0 0 auto;
+    min-width: 28px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid currentColor;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.squadra-anni {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 8px 0 8px;
+}
+
+.squadra-body {
+    padding: 8px;
+}
+
+.squadra-vuota {
     padding: 12px;
-    min-height: 40px;
-    transition: background-color 0.2s, border 0.2s;
+    text-align: center;
+    color: var(--mud-palette-text-secondary);
+    font-size: 0.85rem;
 }
 
-    .squadra-bambini li {
-        padding: 8px 12px;
-        margin: 4px 0;
-        border: 1px solid #bbb;
-        border-radius: 4px;
-        background-color: #f9f9f9;
-        color: black;
+/* Riga bambino */
+.bambino-riga {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    margin: 4px 0;
+    padding: 4px 4px 4px 8px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    background: var(--mud-palette-surface);
+}
+
+    .bambino-riga.trascinabile {
         cursor: grab;
         user-select: none;
         -webkit-user-select: none;
-        transition: background 0.2s, opacity 0.2s, color 0.2s;
     }
 
-        .squadra-bambini li:active {
-            cursor: grabbing;
-            opacity: 0.8;
-            background-color: #c0e0ff;
-        }
-
-.squadra-bambini.dragover {
-    background-color: #e0f7fa;
-    border: 2px dashed #1ABC9C;
+.bambino-nascosto {
+    display: none;
 }
 
-/* ======================= */
-/* DARK MODE =============== */
-/* ======================= */
-@media (prefers-color-scheme: dark) {
-    .squadra-card {
-        border: 1px solid #444;
-        background-color: #1c1c1c;
-    }
-
-    .squadra-bambini li {
-        background-color: #2a2a2a;
-        color: #eee;
-        border: 1px solid #555;
-    }
-
-        .squadra-bambini li:active {
-            background-color: #3a3a3a;
-        }
-
-    .squadra-bambini.dragover {
-        background-color: #1e404a;
-        border: 2px dashed #1ABC9C;
-    }
+.bambino-trovato {
+    border-color: var(--mud-palette-primary);
+    box-shadow: 0 0 0 1px var(--mud-palette-primary);
 }
 
-/* ======================= */
-/* BUTTONS ================= */
-/* ======================= */
-.btn-squadre {
-    margin-right: 10px;
+.bambino-maniglia {
+    color: var(--mud-palette-text-disabled);
 }
 
-.btn-secondary {
-    background-color: #444;
-    color: white;
-    border: none;
-    padding: 6px 12px;
-    border-radius: 4px;
+.bambino-nome {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.bambino-anno {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 45%;
+    font-size: 0.78rem;
+    color: var(--mud-palette-text-secondary);
+}
+
+/* Dialog squadra */
+.squadra-anteprima {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+    padding: 0 12px;
+    border: 1px solid var(--mud-palette-lines-default);
+    border-radius: var(--mud-default-borderradius);
+    font-weight: 600;
+}
+
+.swatch-griglia {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 36px);
+    gap: 8px;
+}
+
+.swatch {
+    width: 36px;
+    height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
     cursor: pointer;
-    transition: background 0.2s;
+    padding: 0;
 }
 
-    .btn-secondary:hover {
-        background-color: #666;
+    .swatch-selezionato {
+        outline: 3px solid var(--mud-palette-primary);
+        outline-offset: 2px;
     }
+
+    .swatch:disabled {
+        cursor: default;
+        opacity: 0.6;
+    }
+
+/* Dialog "Sposta in" */
+.sposta-opzione {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 48px;
+    padding: 0 12px;
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: var(--mud-default-borderradius);
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+
+    .sposta-opzione:hover {
+        filter: brightness(0.95);
+    }
+
+.sposta-nome {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Stampa: solo le squadre, a due colonne, con i colori */
+@media print {
+    .mud-appbar,
+    .mud-drawer,
+    .mud-snackbar-provider,
+    .mud-overlay,
+    .no-print {
+        display: none !important;
+    }
+
+    .mud-main-content {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .mud-container {
+        max-width: none !important;
+        padding: 0 !important;
+    }
+
+    .squadre-griglia {
+        display: block;
+        column-count: 2;
+        column-gap: 12px;
+    }
+
+    .squadra-cella {
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin-bottom: 12px;
+    }
+
+    .squadra-senza-risultati {
+        opacity: 1;
+    }
+
+    .squadra-card {
+        box-shadow: none !important;
+        border: 1px solid #999 !important;
+    }
+
+    .squadra-header {
+        min-height: 0;
+        padding: 6px 10px;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .squadra-body[hidden] {
+        display: block !important;
+    }
+
+    .bambino-riga {
+        min-height: 0;
+        margin: 0;
+        padding: 2px 4px;
+        border: 0;
+        border-bottom: 1px solid #ddd;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .bambino-nascosto {
+        display: flex !important;
+    }
+
+    .sortable-list:empty::before {
+        display: none;
+    }
+}

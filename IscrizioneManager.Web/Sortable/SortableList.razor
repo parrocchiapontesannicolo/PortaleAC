@@ -1,35 +1,46 @@
-@using System.Diagnostics.CodeAnalysis
-
+@* Lista trascinabile generica basata su SortableJS.
+   Il componente non modifica Items: notifica OnUpdate / OnRemove e lascia
+   al chiamante l'aggiornamento del modello. *@
+@typeparam T
+@implements IAsyncDisposable
 @inject IJSRuntime JS
 
-@typeparam T
 <link href="css/SortableList.css" rel="stylesheet" />
-<div id="@Id">
+<div id="@Id" class="@($"sortable-list {Class}".Trim())" data-empty="@EmptyText">
     @foreach (var item in Items)
     {
-        @if (SortableItemTemplate is not null)
-        {
-            @SortableItemTemplate(item)
-        }
+        <div class="sortable-item" @key="KeySelector is null ? item : KeySelector(item)">
+            @SortableItemTemplate?.Invoke(item)
+        </div>
     }
 </div>
 
 @code {
-
     [Parameter]
     public RenderFragment<T>? SortableItemTemplate { get; set; }
 
-    [Parameter, AllowNull]
-    public List<T> Items { get; set; }
+    [Parameter, EditorRequired]
+    public List<T> Items { get; set; } = new();
 
+    /// <summary>Chiave stabile per elemento (consigliata): evita che Blazor riusi il DOM sbagliato.</summary>
+    [Parameter]
+    public Func<T, object>? KeySelector { get; set; }
+
+    /// <summary>Spostamento all'interno della stessa lista.</summary>
     [Parameter]
     public EventCallback<(int oldIndex, int newIndex)> OnUpdate { get; set; }
 
+    /// <summary>Spostamento verso un'altra lista: from / to sono gli Id delle liste.</summary>
     [Parameter]
-    public EventCallback<(int oldIndex, int newIndex, int? from, int? to)> OnRemove { get; set; }
+    public EventCallback<(int oldIndex, int newIndex, string? from, string? to)> OnRemove { get; set; }
 
+    /// <summary>Errore di inizializzazione (es. SortableJS non caricato). Se non gestito viene rilanciato.</summary>
     [Parameter]
-    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public EventCallback<Exception> OnError { get; set; }
+
+    /// <summary>Id dell'elemento HTML (deve essere unico nella pagina).</summary>
+    [Parameter]
+    public string Id { get; set; } = $"sortable-{Guid.NewGuid():N}";
 
     [Parameter]
     public string Group { get; set; } = Guid.NewGuid().ToString();
@@ -44,39 +55,102 @@
     public bool Sort { get; set; } = true;
 
     [Parameter]
+    public bool Disabled { get; set; }
+
+    [Parameter]
     public string Handle { get; set; } = string.Empty;
 
+    /// <summary>Selettore CSS di elementi che non avviano il trascinamento (es. pulsanti).</summary>
     [Parameter]
     public string? Filter { get; set; }
 
     [Parameter]
     public bool ForceFallback { get; set; } = true;
 
-    private DotNetObjectReference<SortableList<T>>? selfReference;
+    /// <summary>Millisecondi di pressione prima del trascinamento sui dispositivi touch.</summary>
+    [Parameter]
+    public int TouchDelay { get; set; } = 200;
+
+    /// <summary>Testo mostrato quando la lista è vuota.</summary>
+    [Parameter]
+    public string? EmptyText { get; set; }
+
+    [Parameter]
+    public string? Class { get; set; }
+
+    private DotNetObjectReference<SortableList<T>>? _selfReference;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _sortable;
+    private bool _disabledApplicato;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            selfReference = DotNetObjectReference.Create(this);
-            var module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/SortableList.js");
-            await module.InvokeAsync<string>("init", Id, Group, Pull, Put, Sort, Handle, Filter, selfReference, ForceFallback);
+            try
+            {
+                _selfReference = DotNetObjectReference.Create(this);
+                _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/SortableList.js");
+                var options = new
+                {
+                    Group,
+                    Pull,
+                    Put,
+                    Sort,
+                    Disabled,
+                    Handle,
+                    Filter,
+                    ForceFallback,
+                    TouchDelay
+                };
+                _sortable = await _module.InvokeAsync<IJSObjectReference>("init", Id, options, _selfReference);
+                _disabledApplicato = Disabled;
+            }
+            catch (Exception ex)
+            {
+                if (OnError.HasDelegate)
+                    await OnError.InvokeAsync(ex);
+                else
+                    throw;
+            }
+        }
+        else if (_module is not null && _sortable is not null && _disabledApplicato != Disabled)
+        {
+            _disabledApplicato = Disabled;
+            await _module.InvokeVoidAsync("setDisabled", _sortable, Disabled);
         }
     }
 
     [JSInvokable]
-    public void OnUpdateJS(int oldIndex, int newIndex)
-    {
-        // invoke the OnUpdate event passing in the oldIndex and the newIndex
-        OnUpdate.InvokeAsync((oldIndex, newIndex));
-    }
+    public Task OnUpdateJS(int oldIndex, int newIndex)
+        => OnUpdate.InvokeAsync((oldIndex, newIndex));
 
     [JSInvokable]
-    public void OnRemoveJS(int oldIndex, int newIndex, int? from, int? to)
-    {
-        // remove the item from the list
-        OnRemove.InvokeAsync((oldIndex, newIndex, from, to));
-    }
+    public Task OnRemoveJS(int oldIndex, int newIndex, string? from, string? to)
+        => OnRemove.InvokeAsync((oldIndex, newIndex, from, to));
 
-    public void Dispose() => selfReference?.Dispose();
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            if (_module is not null && _sortable is not null)
+                await _module.InvokeVoidAsync("destroy", _sortable);
+            if (_sortable is not null)
+                await _sortable.DisposeAsync();
+            if (_module is not null)
+                await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // Circuito/pagina già chiusi: niente da liberare lato JS
+        }
+        catch (JSException ex)
+        {
+            Console.Error.WriteLine($"SortableList: errore in chiusura ({ex.Message})");
+        }
+        finally
+        {
+            _selfReference?.Dispose();
+        }
+    }
 }

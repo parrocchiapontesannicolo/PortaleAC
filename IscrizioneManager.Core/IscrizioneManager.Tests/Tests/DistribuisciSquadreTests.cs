@@ -109,7 +109,7 @@ public class DistribuisciSquadreTests
     }
 
     [Fact]
-    public void Distribuisci_ResultsAreSortedByAnnoDescThenByName()
+    public void Distribuisci_ResultsAreSortedLikeTheLoadedList_ByAnnoThenByName()
     {
         var bambini = new List<Bambino>
         {
@@ -126,8 +126,138 @@ public class DistribuisciSquadreTests
         SquadraDistributor.Distribuisci(squadre, NoShuffle);
 
         var ordered = squadre.Single(s => s.Id == 1).Bambini;
-        ordered[0].Anno.Should().Be(2);
-        ordered.Where(b => b.Anno == 2).Select(b => b.Cognome).Should().BeInAscendingOrder();
+        ordered.Select(b => b.Cognome).Should().Equal("Alberini", "Bianchi", "Zanetti");
+    }
+
+    [Fact]
+    public void Distribuisci_NoRealSquadre_LeavesBambiniInSenzaSquadra()
+    {
+        var bambini = Enumerable.Range(1, 3).Select(i => Bambino(i, $"C{i}", $"N{i}", 1)).ToArray();
+        var squadre = new List<Squadra> { Squadra(0, "Senza squadra", bambini) };
+
+        var act = () => SquadraDistributor.Distribuisci(squadre, NoShuffle);
+
+        act.Should().NotThrow();
+        squadre.Single().Bambini.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void Distribuisci_BambinoDuplicatedInTwoSquadre_IsAssignedOnlyOnce()
+    {
+        var doppio = Bambino(1, "A", "A", 1);
+        var squadre = new List<Squadra>
+        {
+            Squadra(1, "Alpha", doppio),
+            Squadra(2, "Beta", doppio, Bambino(2, "B", "B", 1)),
+            Squadra(0, "Senza squadra")
+        };
+
+        SquadraDistributor.Distribuisci(squadre, NoShuffle);
+
+        squadre.SelectMany(s => s.Bambini).Select(b => b.Id).Should().OnlyHaveUniqueItems().And.HaveCount(2);
+    }
+
+    [Fact]
+    public void Distribuisci_MixedAnni_EachAnnoIsBalancedAcrossSquadre()
+    {
+        var bambini = new List<Bambino>();
+        for (int i = 1; i <= 6; i++) bambini.Add(Bambino(i, $"A{i}", "x", 1));
+        for (int i = 7; i <= 9; i++) bambini.Add(Bambino(i, $"B{i}", "x", 2));
+        var squadre = new List<Squadra>
+        {
+            Squadra(1, "Alpha"), Squadra(2, "Beta"), Squadra(3, "Gamma"),
+            Squadra(0, "Senza squadra", bambini.ToArray())
+        };
+
+        SquadraDistributor.Distribuisci(squadre, NoShuffle);
+
+        foreach (var s in squadre.Where(s => s.Id != 0))
+        {
+            s.Bambini.Count(b => b.Anno == 1).Should().Be(2);
+            s.Bambini.Count(b => b.Anno == 2).Should().Be(1);
+        }
+    }
+
+    [Fact]
+    public void Sposta_MovesBambinoAndKeepsDestinationSorted()
+    {
+        var squadre = new List<Squadra>
+        {
+            Squadra(1, "Alpha", Bambino(1, "Rossi", "Mario", 1)),
+            Squadra(2, "Beta", Bambino(2, "Bianchi", "Anna", 1), Bambino(3, "Verdi", "Luca", 1)),
+            Squadra(0, "Senza squadra")
+        };
+
+        var spostato = SquadraDistributor.Sposta(squadre, 1, 1, 2);
+
+        spostato!.Id.Should().Be(1);
+        squadre.Single(s => s.Id == 1).Bambini.Should().BeEmpty();
+        squadre.Single(s => s.Id == 2).Bambini.Select(b => b.Cognome).Should().Equal("Bianchi", "Rossi", "Verdi");
+    }
+
+    [Fact]
+    public void Sposta_ToSenzaSquadra_Works()
+    {
+        var squadre = new List<Squadra>
+        {
+            Squadra(1, "Alpha", Bambino(1, "Rossi", "Mario", 1)),
+            Squadra(0, "Senza squadra")
+        };
+
+        SquadraDistributor.Sposta(squadre, 1, 1, 0).Should().NotBeNull();
+
+        squadre.Single(s => s.Id == 0).Bambini.Should().ContainSingle(b => b.Id == 1);
+    }
+
+    [Theory]
+    [InlineData(1, 1, 1)]   // stessa squadra
+    [InlineData(99, 1, 2)]  // bambino inesistente
+    [InlineData(1, 1, 99)]  // destinazione inesistente
+    [InlineData(1, 2, 0)]   // bambino non presente nella squadra di origine
+    public void Sposta_InvalidRequest_ReturnsNullAndChangesNothing(int bambinoId, int da, int a)
+    {
+        var squadre = new List<Squadra>
+        {
+            Squadra(1, "Alpha", Bambino(1, "Rossi", "Mario", 1)),
+            Squadra(2, "Beta"),
+            Squadra(0, "Senza squadra")
+        };
+
+        SquadraDistributor.Sposta(squadre, bambinoId, da, a).Should().BeNull();
+
+        squadre.Single(s => s.Id == 1).Bambini.Should().HaveCount(1);
+        squadre.Single(s => s.Id == 2).Bambini.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Assegnazioni_ExcludesSenzaSquadraAndSetsEventId()
+    {
+        var squadre = new List<Squadra>
+        {
+            Squadra(1, "Alpha", Bambino(1, "A", "A", 1), Bambino(2, "B", "B", 1)),
+            Squadra(2, "Beta", Bambino(3, "C", "C", 1)),
+            Squadra(0, "Senza squadra", Bambino(4, "D", "D", 1))
+        };
+
+        var righe = SquadraDistributor.Assegnazioni(squadre, eventId: 7);
+
+        righe.Select(r => (r.IdSquadra, r.IdBambino)).Should().BeEquivalentTo(new[] { (1, 1), (1, 2), (2, 3) });
+        righe.Should().OnlyContain(r => r.event_id == 7);
+    }
+
+    [Fact]
+    public void Assegnazioni_BambinoInTwoSquadre_KeepsOnlyTheFirst()
+    {
+        var doppio = Bambino(1, "A", "A", 1);
+        var squadre = new List<Squadra>
+        {
+            Squadra(1, "Alpha", doppio),
+            Squadra(2, "Beta", doppio),
+        };
+
+        var righe = SquadraDistributor.Assegnazioni(squadre, eventId: 1);
+
+        righe.Should().ContainSingle().Which.IdSquadra.Should().Be(1);
     }
 
     [Fact]

@@ -1,13 +1,39 @@
-/* 
-  you need the ::deep identifier if you are using scoped styles like this
-  because scoped styles are only applied to markup in the component, not
-  to the markup inside the render fragment.
-*/
+/* Stili di Sortable/SortableList.razor (foglio globale, niente ::deep) */
 
-::deep .sortable-ghost {
-  visibility: hidden;
+.sortable-list {
+    min-height: 56px;
+    position: relative;
 }
 
-::deep .sortable-fallback {
-  opacity: 1 !important
+    /* Segnaposto per liste vuote: resta un'area dove rilasciare */
+    .sortable-list:empty::before {
+        content: attr(data-empty);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 56px;
+        margin: 4px 0;
+        border: 2px dashed var(--mud-palette-lines-default, #ccc);
+        border-radius: var(--mud-default-borderradius, 8px);
+        color: var(--mud-palette-text-secondary, #777);
+        font-size: 0.85rem;
+    }
+
+.sortable-item {
+    touch-action: manipulation;
+}
+
+/* Elemento originale durante il trascinamento: resta il posto, attenuato */
+.sortable-ghost {
+    opacity: 0.35;
+}
+
+.sortable-chosen {
+    cursor: grabbing;
+}
+
+/* Copia che segue il dito / il mouse (forceFallback) */
+.sortable-fallback {
+    opacity: 1 !important;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
 }

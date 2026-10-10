@@ -1,0 +1,155 @@
+@* Creazione / modifica di una squadra: nome e colore con anteprima.
+   Salva direttamente e si chiude con Ok(true) solo se il salvataggio riesce. *@
+@using MudBlazor.Utilities
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(SquadraId is null ? "Nuova squadra" : "Modifica squadra")</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <div class="squadra-anteprima" style="@($"background:{ColoreHex};color:{Squadra.TestoLeggibile(ColoreHex)}")">
+                <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Small" />
+                <span>@(string.IsNullOrWhiteSpace(_nome) ? "Nome squadra" : _nome.Trim())</span>
+            </div>
+
+            <MudTextField T="string" @bind-Value="_nome" Label="Nome" Variant="Variant.Outlined"
+                          Immediate="true" AutoFocus="true" MaxLength="SquadraBambinoController.LunghezzaMassimaNome"
+                          Counter="SquadraBambinoController.LunghezzaMassimaNome"
+                          Error="@(ErroreNome is not null && _tentato)" ErrorText="@ErroreNome"
+                          OnKeyDown="OnKeyDown" Disabled="_salvataggio" />
+
+            <div>
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Colore</MudText>
+                <div class="swatch-griglia">
+                    @foreach (var (hex, nome) in ColoriPredefiniti)
+                    {
+                        var colore = hex;
+                        var selezionato = string.Equals(colore, ColoreHex, StringComparison.OrdinalIgnoreCase);
+                        <button type="button" class="@($"swatch {(selezionato ? "swatch-selezionato" : "")}")"
+                                style="@($"background:{colore};color:{Squadra.TestoLeggibile(colore)}")"
+                                title="@nome" aria-label="@nome" aria-pressed="@(selezionato ? "true" : "false")"
+                                disabled="@_salvataggio" @onclick="() => ScegliColore(colore)">
+                            @if (selezionato)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" />
+                            }
+                        </button>
+                    }
+                </div>
+                <MudColorPicker @bind-Value="_colore" Label="Altro colore" ShowAlpha="false"
+                                ColorPickerView="ColorPickerView.Spectrum" Variant="Variant.Outlined"
+                                Margin="Margin.Dense" Class="mt-3" Disabled="_salvataggio" />
+            </div>
+
+            @if (_errore is not null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_errore</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annulla" Disabled="_salvataggio">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="SalvaAsync" Disabled="_salvataggio">
+            @if (_salvataggio)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Salva
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Null = nuova squadra.</summary>
+    [Parameter] public int? SquadraId { get; set; }
+    [Parameter] public string Nome { get; set; } = string.Empty;
+    [Parameter] public string Colore { get; set; } = string.Empty;
+    /// <summary>Nomi delle altre squadre dell'evento, per evitare doppioni.</summary>
+    [Parameter] public IReadOnlyCollection<string> NomiEsistenti { get; set; } = Array.Empty<string>();
+    /// <summary>Colori già usati: per una nuova squadra si propone il primo libero.</summary>
+    [Parameter] public IReadOnlyCollection<string> ColoriUsati { get; set; } = Array.Empty<string>();
+
+    public static readonly (string Hex, string Nome)[] ColoriPredefiniti =
+    {
+        ("#E53935", "Rosso"), ("#FB8C00", "Arancione"), ("#FDD835", "Giallo"), ("#7CB342", "Verde chiaro"),
+        ("#2E7D32", "Verde"), ("#00897B", "Verde acqua"), ("#29B6F6", "Azzurro"), ("#1E88E5", "Blu"),
+        ("#283593", "Blu scuro"), ("#8E24AA", "Viola"), ("#EC407A", "Rosa"), ("#6D4C41", "Marrone"),
+        ("#757575", "Grigio"), ("#212121", "Nero"), ("#FFFFFF", "Bianco"),
+    };
+
+    private string _nome = string.Empty;
+    private MudColor _colore = new("#1E88E5");
+    private bool _tentato;
+    private bool _salvataggio;
+    private string? _errore;
+
+    private string ColoreHex => _colore.ToString(MudColorOutputFormats.Hex).ToUpperInvariant();
+
+    private string? ErroreNome
+    {
+        get
+        {
+            var n = (_nome ?? string.Empty).Trim();
+            if (n.Length == 0)
+                return "Il nome è obbligatorio";
+            if (string.Equals(n, Squadra.NomeSenzaSquadra, StringComparison.OrdinalIgnoreCase))
+                return "Nome riservato";
+            if (NomiEsistenti.Any(x => string.Equals(x.Trim(), n, StringComparison.CurrentCultureIgnoreCase)))
+                return "Esiste già una squadra con questo nome";
+            return null;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _nome = Nome;
+        var hex = Squadra.NormalizzaColore(Colore);
+        if (hex is null)
+        {
+            // Nuova squadra: primo colore predefinito non ancora usato
+            var usati = ColoriUsati.Select(Squadra.NormalizzaColore).OfType<string>().ToHashSet(StringComparer.OrdinalIgnoreCase);
+            hex = ColoriPredefiniti.Select(c => c.Hex).FirstOrDefault(c => !usati.Contains(c)) ?? ColoriPredefiniti[0].Hex;
+        }
+        _colore = new MudColor(hex);
+    }
+
+    private void ScegliColore(string hex) => _colore = new MudColor(hex);
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await SalvaAsync();
+    }
+
+    private void Annulla() => MudDialog.Cancel();
+
+    private async Task SalvaAsync()
+    {
+        _tentato = true;
+        _errore = null;
+        if (ErroreNome is not null || _salvataggio)
+            return;
+
+        _salvataggio = true;
+        try
+        {
+            if (SquadraId is int id)
+                await SquadraBambinoController.ModificaSquadraAsync(id, _nome, ColoreHex);
+            else
+                await SquadraBambinoController.CreaSquadraAsync(_nome, ColoreHex);
+
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _errore = ex.Message;
+        }
+        finally
+        {
+            _salvataggio = false;
+        }
+    }
+}

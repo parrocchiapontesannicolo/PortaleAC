@@ -1,0 +1,36 @@
+@* Alternativa al trascinamento (comoda sul telefono): scegli la squadra di destinazione.
+   Restituisce Ok(idSquadra). *@
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Sposta @NomeBambino</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3 mud-text-secondary">
+            Ora in: <b>@(Squadre.FirstOrDefault(s => s.Id == SquadraAttualeId)?.Nome ?? "-")</b>
+        </MudText>
+        <MudStack Spacing="2" Class="pb-2">
+            @foreach (var s in Squadre.Where(s => s.Id != SquadraAttualeId))
+            {
+                var squadra = s;
+                <button type="button" class="sposta-opzione"
+                        style="@($"background:{squadra.Color};color:{Squadra.TestoLeggibile(squadra.Color)}")"
+                        @onclick="() => MudDialog.Close(DialogResult.Ok(squadra.Id))">
+                    <span class="sposta-nome">@squadra.Nome</span>
+                    <span class="squadra-conteggio">@squadra.Bambini.Count</span>
+                </button>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()">Annulla</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string NomeBambino { get; set; } = string.Empty;
+    [Parameter] public int SquadraAttualeId { get; set; }
+    [Parameter] public IReadOnlyList<Squadra> Squadre { get; set; } = Array.Empty<Squadra>();
+}
