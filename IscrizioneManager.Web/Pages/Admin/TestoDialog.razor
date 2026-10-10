@@ -1,0 +1,98 @@
+@* Dialog con un campo di testo (rinomina, nuovo elemento). Se è impostato
+   Salva, il salvataggio avviene qui e gli errori restano visibili nel dialog. *@
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="this" OnSubmit="Conferma">
+            @if (!string.IsNullOrEmpty(Spiegazione))
+            {
+                <MudText Typo="Typo.body2" Class="mb-3">@Spiegazione</MudText>
+            }
+            <MudTextField T="string" @bind-Value="_valore" Label="@Etichetta" Variant="Variant.Outlined"
+                          MaxLength="MaxLength" Counter="MaxLength" Immediate="true" AutoFocus="true" Lines="@(MaxLength > 100 ? 3 : 1)"
+                          Disabled="_inCorso" />
+            @if (!string.IsNullOrEmpty(_errore))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@_errore</MudAlert>
+            }
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()" Disabled="_inCorso">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Conferma"
+                   Disabled="@(_inCorso || string.IsNullOrWhiteSpace(_valore))">
+            @if (_inCorso)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            @TestoConferma
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public string Etichetta { get; set; } = "Nome";
+    [Parameter] public string Valore { get; set; } = string.Empty;
+    [Parameter] public string? Spiegazione { get; set; }
+    [Parameter] public string TestoConferma { get; set; } = "Salva";
+    [Parameter] public int MaxLength { get; set; } = AdminLogica.NomeMaxLength;
+
+    /// <summary>Facoltativo: salva il valore; se lancia un'eccezione il dialog resta aperto con l'errore.</summary>
+    [Parameter] public Func<string, Task>? Salva { get; set; }
+
+    private string _valore = string.Empty;
+    private bool _inCorso;
+    private string? _errore;
+
+    protected override void OnInitialized() => _valore = Valore;
+
+    /// <summary>Apre il dialog e restituisce il testo confermato (null se annullato).</summary>
+    public static async Task<string?> ApriAsync(IDialogService dialogService, string titolo, string etichetta,
+        string valore = "", Func<string, Task>? salva = null, string testoConferma = "Salva", string? spiegazione = null, int maxLength = AdminLogica.NomeMaxLength)
+    {
+        var parametri = new DialogParameters<TestoDialog>
+        {
+            { d => d.Etichetta, etichetta },
+            { d => d.Valore, valore },
+            { d => d.Salva, salva },
+            { d => d.TestoConferma, testoConferma },
+            { d => d.Spiegazione, spiegazione },
+            { d => d.MaxLength, maxLength },
+        };
+        var rif = await dialogService.ShowAsync<TestoDialog>(titolo, parametri,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+        var esito = await rif.Result;
+        return esito is { Canceled: false } ? esito.Data as string : null;
+    }
+
+    private async Task Conferma()
+    {
+        if (_inCorso || string.IsNullOrWhiteSpace(_valore))
+            return;
+
+        var valore = _valore.Trim();
+        if (Salva == null)
+        {
+            MudDialog.Close(DialogResult.Ok(valore));
+            return;
+        }
+
+        _inCorso = true;
+        _errore = null;
+        try
+        {
+            await Salva(valore);
+            MudDialog.Close(DialogResult.Ok(valore));
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+}

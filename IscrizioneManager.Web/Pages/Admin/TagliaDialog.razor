@@ -1,0 +1,77 @@
+@* Creazione / modifica di una taglia della maglietta (tabella taglia). *@
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="this" OnSubmit="Salva">
+            <MudStack Spacing="3">
+                <MudTextField T="string" @bind-Value="_codice" Label="Taglia" Variant="Variant.Outlined" Placeholder="Es. M oppure 7-8 anni"
+                              MaxLength="20" Immediate="true" AutoFocus="true" Disabled="_inCorso" />
+                <MudTextField T="string" @bind-Value="_descrizione" Label="Descrizione (facoltativa)" Variant="Variant.Outlined"
+                              MaxLength="100" Disabled="_inCorso" />
+                @if (!string.IsNullOrEmpty(_errore))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_errore</MudAlert>
+                }
+            </MudStack>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()" Disabled="_inCorso">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Salva"
+                   Disabled="@(_inCorso || string.IsNullOrWhiteSpace(_codice))">
+            @if (_inCorso)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Salva
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public int EventId { get; set; }
+    [Parameter] public TagliaAdmin? Originale { get; set; }
+
+    private string _codice = string.Empty;
+    private string? _descrizione;
+    private bool _inCorso;
+    private string? _errore;
+
+    protected override void OnInitialized()
+    {
+        _codice = Originale?.Codice ?? string.Empty;
+        _descrizione = Originale?.Descrizione;
+    }
+
+    private async Task Salva()
+    {
+        if (_inCorso || string.IsNullOrWhiteSpace(_codice))
+            return;
+
+        var taglia = new TagliaAdmin
+        {
+            Id = Originale?.Id ?? 0,
+            EventId = Originale?.EventId ?? EventId,
+            Codice = _codice,
+            Descrizione = _descrizione,
+        };
+
+        _inCorso = true;
+        _errore = null;
+        try
+        {
+            await AdminController.SalvaTagliaAsync(taglia);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+}

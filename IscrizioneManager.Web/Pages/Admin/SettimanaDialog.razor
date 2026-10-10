@@ -1,0 +1,103 @@
+@* Creazione / modifica di una settimana dell'evento (tabella settimana). *@
+@using System.Globalization
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="this" OnSubmit="Salva">
+            <MudStack Spacing="3">
+                <MudTextField T="string" @bind-Value="_desc" Label="Descrizione" Variant="Variant.Outlined"
+                              Placeholder="Es. 1ª settimana" MaxLength="100" Disabled="_inCorso" />
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudDatePicker @bind-Date="_inizio" Label="Dal" Variant="Variant.Outlined" DateFormat="dd/MM/yyyy"
+                                   Culture="_it" FirstDayOfWeek="DayOfWeek.Monday" Disabled="_inCorso" Style="min-width:150px" Class="flex-1" />
+                    <MudDatePicker @bind-Date="_fine" Label="Al" Variant="Variant.Outlined" DateFormat="dd/MM/yyyy"
+                                   Culture="_it" FirstDayOfWeek="DayOfWeek.Monday" Disabled="_inCorso" Style="min-width:150px" Class="flex-1"
+                                   MinDate="_inizio" />
+                </MudStack>
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    <MudNumericField T="decimal?" @bind-Value="_costoIntero" Label="Costo intero" Variant="Variant.Outlined"
+                                     Adornment="Adornment.Start" AdornmentText="€" Min="0" Format="0.##" Culture="_it"
+                                     Disabled="_inCorso" HideSpinButtons="true" Style="min-width:140px" Class="flex-1" />
+                    <MudNumericField T="decimal?" @bind-Value="_costoBase" Label="Costo base" Variant="Variant.Outlined"
+                                     Adornment="Adornment.Start" AdornmentText="€" Min="0" Format="0.##" Culture="_it"
+                                     Disabled="_inCorso" HideSpinButtons="true" Style="min-width:140px" Class="flex-1" />
+                </MudStack>
+
+                @if (!string.IsNullOrEmpty(_errore))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_errore</MudAlert>
+                }
+            </MudStack>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()" Disabled="_inCorso">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Salva"
+                   Disabled="@(_inCorso || _inizio == null || _fine == null)">
+            @if (_inCorso)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Salva
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public int EventId { get; set; }
+
+    /// <summary>Settimana da modificare (null = nuova).</summary>
+    [Parameter] public SettimanaAdmin? Originale { get; set; }
+
+    private static readonly CultureInfo _it = CultureInfo.GetCultureInfo("it-IT");
+
+    private string? _desc;
+    private DateTime? _inizio;
+    private DateTime? _fine;
+    private decimal? _costoIntero;
+    private decimal? _costoBase;
+    private bool _inCorso;
+    private string? _errore;
+
+    protected override void OnInitialized()
+    {
+        if (Originale == null)
+            return;
+        _desc = Originale.Desc;
+        _inizio = Originale.DataInizio;
+        _fine = Originale.DataFine;
+        _costoIntero = Originale.CostoIntero;
+        _costoBase = Originale.CostoBase;
+    }
+
+    private async Task Salva()
+    {
+        if (_inCorso || _inizio == null || _fine == null)
+            return;
+
+        var settimana = Originale?.Copia() ?? new SettimanaAdmin { EventId = EventId };
+        settimana.Desc = _desc;
+        settimana.DataInizio = _inizio.Value.Date;
+        settimana.DataFine = _fine.Value.Date;
+        settimana.CostoIntero = _costoIntero;
+        settimana.CostoBase = _costoBase;
+
+        _inCorso = true;
+        _errore = null;
+        try
+        {
+            await AdminController.SalvaSettimanaAsync(settimana);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+}

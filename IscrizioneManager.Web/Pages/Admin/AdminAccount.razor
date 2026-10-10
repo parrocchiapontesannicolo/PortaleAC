@@ -1,0 +1,298 @@
+@page "/admin/account"
+@inject AppState AppState
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Account - Portale AC</PageTitle>
+
+<PaginaProtetta RichiedeSuperadmin="true" RichiedeEvento="false">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="mb-4" Spacing="2">
+        <div>
+            <MudText Typo="Typo.h5">Account</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Account condivisi usati per accedere. L'ordine è quello della tendina di accesso.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+                   OnClick="NuovoAccount" Disabled="@(_caricamento || _errore != null)">Nuovo account</MudButton>
+    </MudStack>
+
+    @if (_caricamento)
+    {
+        <MudPaper Outlined="true" Class="pa-4">
+            @for (var i = 0; i < 4; i++)
+            {
+                <MudSkeleton SkeletonType="SkeletonType.Text" Height="44px" />
+            }
+        </MudPaper>
+    }
+    else if (_errore != null)
+    {
+        <MudAlert Severity="Severity.Error">
+            Impossibile caricare gli account: @_errore
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" OnClick="CaricaAsync" Class="ml-2">Riprova</MudButton>
+        </MudAlert>
+    }
+    else
+    {
+        <MudTable T="AppAccount" Items="_accounts" Hover="true" Breakpoint="Breakpoint.Sm" Elevation="0" Outlined="true"
+                  Loading="_inCorso" LoadingProgressColor="Color.Primary">
+            <HeaderContent>
+                <MudTh Style="width:96px">Ordine</MudTh>
+                <MudTh>Account</MudTh>
+                <MudTh>Attivo</MudTh>
+                <MudTh>Super admin</MudTh>
+                <MudTh>Eventi</MudTh>
+                <MudTh Style="width:56px"></MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                @{
+                    var account = context;
+                    var indice = _accounts.IndexOf(account);
+                    var sonoIo = account.Id == AppState.Account?.Id;
+                }
+                <MudTd DataLabel="Ordine">
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowUpward" Size="Size.Small" aria-label="Sposta su"
+                                   Disabled="@(_inCorso || indice == 0)" OnClick="() => Sposta(indice, -1)" />
+                    <MudIconButton Icon="@Icons.Material.Filled.ArrowDownward" Size="Size.Small" aria-label="Sposta giù"
+                                   Disabled="@(_inCorso || indice == _accounts.Count - 1)" OnClick="() => Sposta(indice, 1)" />
+                </MudTd>
+                <MudTd DataLabel="Account">
+                    <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        <MudText Typo="Typo.body1" Style="@(account.Attivo ? "font-weight:500" : "opacity:.6")">@account.Nome</MudText>
+                        @if (sonoIo)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Text">tu</MudChip>
+                        }
+                        @if (!account.Attivo)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Disattivato</MudChip>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Attivo">
+                    <MudTooltip Text="@(sonoIo ? "Non puoi disattivare l'account con cui sei collegato" : "Un account disattivato non può più accedere")">
+                        <MudSwitch T="bool" Value="account.Attivo" ValueChanged="v => ImpostaAttivo(account, v)"
+                                   Color="Color.Success" Disabled="@(_inCorso || sonoIo)" aria-label="Attivo" />
+                    </MudTooltip>
+                </MudTd>
+                <MudTd DataLabel="Super admin">
+                    <MudSwitch T="bool" Value="account.IsSuperadmin" ValueChanged="v => ImpostaSuperadmin(account, v)"
+                               Color="Color.Warning" Disabled="@(_inCorso || sonoIo)" aria-label="Super amministratore" />
+                </MudTd>
+                <MudTd DataLabel="Eventi">
+                    @if (account.IsSuperadmin)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                 Icon="@Icons.Material.Filled.AllInclusive">Tutti</MudChip>
+                    }
+                    else
+                    {
+                        var n = _accessi.Count(a => a.AccountId == account.Id);
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="@(n == 0 ? Color.Error : Color.Primary)"
+                                   StartIcon="@Icons.Material.Filled.EventAvailable" OnClick="() => ApriEventi(account)" Disabled="_inCorso">
+                            @(n == 0 ? "Nessun evento" : n == 1 ? "1 evento" : $"{n} eventi")
+                        </MudButton>
+                    }
+                </MudTd>
+                <MudTd>
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" AriaLabel="Azioni" Dense="true" Disabled="_inCorso"
+                             AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                        <MudMenuItem Icon="@Icons.Material.Outlined.EventAvailable" OnClick="() => ApriEventi(account)">Eventi e ruoli</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Outlined.Edit" OnClick="() => Rinomina(account)">Rinomina</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Outlined.Key" OnClick="() => CambiaPassword(account)">Cambia password</MudMenuItem>
+                        <MudDivider />
+                        <MudMenuItem Icon="@Icons.Material.Outlined.Delete" IconColor="Color.Error" Disabled="sonoIo"
+                                     OnClick="() => Elimina(account)">Elimina</MudMenuItem>
+                    </MudMenu>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Class="pa-4">Nessun account.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+
+        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">
+            I super amministratori vedono tutti gli eventi con tutti i permessi. Deve sempre restarne almeno uno attivo.
+        </MudText>
+    }
+</PaginaProtetta>
+
+@code {
+    private List<AppAccount> _accounts = new();
+    private List<AccountEvento> _accessi = new();
+    private List<Evento> _eventi = new();
+    private List<Ruolo> _ruoli = new();
+    private bool _caricamento = true;
+    private bool _inCorso;
+    private string? _errore;
+
+    private Guid IoId => AppState.Account?.Id ?? Guid.Empty;
+
+    protected override async Task OnInitializedAsync() => await CaricaAsync();
+
+    private async Task CaricaAsync()
+    {
+        _caricamento = _accounts.Count == 0;
+        _errore = null;
+        try
+        {
+            var accounts = AdminController.GetAccountsAsync();
+            var accessi = AdminController.GetAccessiAsync();
+            var eventi = AdminController.GetEventiAsync();
+            var ruoli = AdminController.GetRuoliAsync();
+            await Task.WhenAll(accounts, accessi, eventi, ruoli);
+
+            _accounts = accounts.Result;
+            _accessi = accessi.Result;
+            _eventi = eventi.Result;
+            _ruoli = ruoli.Result;
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _caricamento = false;
+        }
+    }
+
+    /// <summary>Esegue un'operazione mostrando l'esito; ricarica i dati se fallisce.</summary>
+    private async Task Esegui(Func<Task> operazione, string? messaggioOk = null, bool aggiornaSessione = false)
+    {
+        if (_inCorso)
+            return;
+
+        _inCorso = true;
+        try
+        {
+            await operazione();
+            if (messaggioOk != null)
+                Snackbar.Add(messaggioOk, Severity.Success);
+            if (aggiornaSessione)
+                await AggiornaSessioneAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(AdminLogica.MessaggioErrore(ex), Severity.Error);
+            await CaricaAsync();
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+
+    private async Task AggiornaSessioneAsync()
+    {
+        try
+        {
+            await AppState.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Aggiornamento dei permessi non riuscito: " + ex.Message, Severity.Warning);
+        }
+    }
+
+    private async Task NuovoAccount()
+    {
+        var parametri = new DialogParameters<NuovoAccountDialog> { { d => d.Esistenti, _accounts } };
+        var rif = await DialogService.ShowAsync<NuovoAccountDialog>("Nuovo account", parametri,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var esito = await rif.Result;
+        if (esito is not { Canceled: false, Data: NuovoAccountRisultato creato })
+            return;
+
+        Snackbar.Add("Account creato. Ricordati di comunicare la password al gruppo.", Severity.Success);
+        await CaricaAsync();
+
+        var nuovo = _accounts.FirstOrDefault(a => a.Id == creato.Id);
+        if (nuovo is { IsSuperadmin: false })
+            await ApriEventi(nuovo);
+    }
+
+    private async Task ApriEventi(AppAccount account)
+    {
+        var parametri = new DialogParameters<AccountEventiDialog>
+        {
+            { d => d.Account, account },
+            { d => d.Eventi, _eventi },
+            { d => d.Ruoli, _ruoli },
+            { d => d.Accessi, _accessi.Where(a => a.AccountId == account.Id).ToList() },
+        };
+        var rif = await DialogService.ShowAsync<AccountEventiDialog>($"Eventi e ruoli - {account.Nome}", parametri,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var esito = await rif.Result;
+        if (esito is null || esito.Canceled)
+            return;
+
+        if (esito.Data is int modifiche)
+            Snackbar.Add(modifiche == 0 ? "Nessuna modifica" : "Accessi salvati", modifiche == 0 ? Severity.Info : Severity.Success);
+
+        _accessi = await AdminController.GetAccessiAsync();
+        if (account.Id == IoId)
+            await AggiornaSessioneAsync();
+    }
+
+    private async Task Rinomina(AppAccount account)
+    {
+        var nome = await TestoDialog.ApriAsync(DialogService, "Rinomina account", "Nome dell'account", account.Nome,
+            salva: n => AdminController.RinominaAccountAsync(account, n, _accounts));
+        if (nome != null)
+            Snackbar.Add("Account rinominato", Severity.Success);
+    }
+
+    private async Task CambiaPassword(AppAccount account)
+    {
+        var parametri = new DialogParameters<PasswordDialog> { { d => d.Account, account } };
+        var rif = await DialogService.ShowAsync<PasswordDialog>("Cambia password", parametri,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var esito = await rif.Result;
+        if (esito is { Canceled: false })
+            Snackbar.Add($"Password di {account.Nome} aggiornata", Severity.Success);
+    }
+
+    private Task ImpostaAttivo(AppAccount account, bool attivo) =>
+        Esegui(() => AdminController.ImpostaAttivoAsync(account, attivo, IoId),
+            attivo ? $"{account.Nome} riattivato" : $"{account.Nome} disattivato: non potrà più accedere");
+
+    private async Task ImpostaSuperadmin(AppAccount account, bool superadmin)
+    {
+        if (superadmin)
+        {
+            var conferma = await DialogService.ShowMessageBoxAsync("Super amministratore",
+                (MarkupString)$"<b>{System.Net.WebUtility.HtmlEncode(account.Nome)}</b> potrà vedere e modificare tutto, compresi account ed eventi. Confermi?",
+                yesText: "Conferma", cancelText: "Annulla");
+            if (conferma != true)
+                return;
+        }
+
+        await Esegui(() => AdminController.ImpostaSuperadminAsync(account, superadmin, IoId),
+            superadmin ? $"{account.Nome} ora è super amministratore" : $"{account.Nome} non è più super amministratore");
+    }
+
+    private Task Sposta(int indice, int delta) =>
+        Esegui(async () =>
+        {
+            await AdminController.SpostaAccountAsync(_accounts, indice, delta);
+            _accounts = AdminLogica.Ordina(_accounts);
+        });
+
+    private async Task Elimina(AppAccount account)
+    {
+        var conferma = await DialogService.ShowMessageBoxAsync("Elimina account",
+            (MarkupString)$"Eliminare definitivamente <b>{System.Net.WebUtility.HtmlEncode(account.Nome)}</b>? Chi lo usa non potrà più accedere. L'operazione non si può annullare.",
+            yesText: "Elimina", cancelText: "Annulla");
+        if (conferma != true)
+            return;
+
+        await Esegui(async () =>
+        {
+            await AdminController.EliminaAccountAsync(account.Id, IoId);
+            _accounts.Remove(account);
+            _accessi.RemoveAll(a => a.AccountId == account.Id);
+        }, $"Account {account.Nome} eliminato");
+    }
+}

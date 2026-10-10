@@ -1,0 +1,93 @@
+@* Creazione di un evento, con la possibilità di partire dalla configurazione di un altro. *@
+
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="this" OnSubmit="Crea">
+            <MudStack Spacing="3">
+                <MudTextField T="string" @bind-Value="_nome" Label="Nome dell'evento" Variant="Variant.Outlined"
+                              Placeholder="Es. GrEst 2027" MaxLength="AdminLogica.NomeMaxLength" Immediate="true"
+                              AutoFocus="true" Disabled="_inCorso" />
+
+                <MudSelect T="int" @bind-Value="_copiaDa" Label="Parti dalla configurazione di" Variant="Variant.Outlined"
+                           Disabled="_inCorso" AnchorOrigin="Origin.BottomCenter">
+                    <MudSelectItem T="int" Value="0">Nessun evento (impostazioni predefinite)</MudSelectItem>
+                    @foreach (var e in Esistenti)
+                    {
+                        <MudSelectItem T="int" Value="e.Id">@e.Nome@(e.IsActive == 1 ? "" : " (archiviato)")</MudSelectItem>
+                    }
+                </MudSelect>
+
+                @if (_copiaDa != 0)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        Vengono copiati le sezioni del modulo di iscrizione, le classi ammesse, le taglie e i tipi di consenso.
+                        Settimane e link Google vanno impostati per il nuovo evento.
+                    </MudText>
+                    <MudSwitch T="bool" @bind-Value="_copiaAccessi" Color="Color.Primary" Disabled="_inCorso"
+                               Label="Abilita gli stessi account, con lo stesso ruolo" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                        L'evento parte con le sezioni principali del modulo attive e tutte le classi ammesse. Potrai cambiare tutto da "Configura".
+                    </MudText>
+                }
+
+                @if (!string.IsNullOrEmpty(_errore))
+                {
+                    <MudAlert Severity="Severity.Error" Dense="true">@_errore</MudAlert>
+                }
+            </MudStack>
+        </EditForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()" Disabled="_inCorso">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Crea"
+                   Disabled="@(_inCorso || AdminLogica.ValidaNome(_nome) != null)">
+            @if (_inCorso)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Crea evento
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Eventi esistenti, il più recente per primo.</summary>
+    [Parameter] public List<Evento> Esistenti { get; set; } = new();
+
+    private string _nome = string.Empty;
+    private int _copiaDa;
+    private bool _copiaAccessi = true;
+    private bool _inCorso;
+    private string? _errore;
+
+    protected override void OnInitialized() =>
+        _copiaDa = Esistenti.OrderByDescending(e => e.Id).FirstOrDefault()?.Id ?? 0;
+
+    private async Task Crea()
+    {
+        if (_inCorso || AdminLogica.ValidaNome(_nome) != null)
+            return;
+
+        _inCorso = true;
+        _errore = null;
+        try
+        {
+            var creato = await AdminController.CreaEventoAsync(_nome, _copiaDa == 0 ? null : _copiaDa, Esistenti,
+                copiaAccessi: _copiaDa != 0 && _copiaAccessi);
+            MudDialog.Close(DialogResult.Ok(creato));
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+}

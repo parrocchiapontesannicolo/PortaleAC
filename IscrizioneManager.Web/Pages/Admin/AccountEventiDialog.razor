@@ -1,0 +1,151 @@
+@* Eventi accessibili a un account e ruolo per ciascun evento (tabella account_evento). *@
+
+<MudDialog>
+    <DialogContent>
+        <MudStack Spacing="3">
+            @if (Account.IsSuperadmin)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true">
+                    <b>@Account.Nome</b> è super amministratore: accede comunque a tutti gli eventi con tutti i permessi.
+                    I ruoli scelti qui valgono solo se gli togli il ruolo di super amministratore.
+                </MudAlert>
+            }
+
+            @if (Eventi.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true">Non ci sono ancora eventi: creali dalla pagina Eventi.</MudAlert>
+            }
+            else
+            {
+                <MudPaper Outlined="true" Class="pa-3">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Assegnazione rapida</MudText>
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                        <MudSelect T="int" @bind-Value="_ruoloRapido" Label="Ruolo" Variant="Variant.Outlined" Dense="true"
+                                   Margin="Margin.Dense" Style="min-width:200px" Class="flex-grow-1">
+                            <MudSelectItem T="int" Value="0">Nessun accesso</MudSelectItem>
+                            @foreach (var r in Ruoli)
+                            {
+                                <MudSelectItem T="int" Value="r.Id">@r.Nome</MudSelectItem>
+                            }
+                        </MudSelect>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="() => ApplicaATutti(false)">
+                            Tutti gli eventi attivi
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="() => ApplicaATutti(true)">
+                            Anche archiviati
+                        </MudButton>
+                    </MudStack>
+                </MudPaper>
+
+                <MudStack Spacing="0">
+                    @foreach (var e in Eventi)
+                    {
+                        var evento = e;
+                        var ruolo = Ruoli.FirstOrDefault(r => r.Id == _scelte[evento.Id]);
+                        <div class="d-flex flex-wrap align-center gap-2 py-2" style="border-bottom:1px solid var(--mud-palette-lines-default)">
+                            <div class="flex-grow-1" style="min-width:160px">
+                                <MudText Typo="Typo.body1" Style="@(evento.IsActive == 1 ? null : "opacity:.7")">@evento.Nome</MudText>
+                                <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                                    @if (evento.IsActive != 1)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">Archiviato</MudChip>
+                                    }
+                                    @if (Modificato(evento.Id))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Text">Modificato</MudChip>
+                                    }
+                                </MudStack>
+                            </div>
+                            <MudSelect T="int" Value="_scelte[evento.Id]" ValueChanged="v => _scelte[evento.Id] = v"
+                                       Label="Ruolo" Variant="Variant.Outlined" Dense="true" Margin="Margin.Dense"
+                                       Style="min-width:200px; max-width:280px" Disabled="_inCorso"
+                                       HelperText="@(ruolo == null ? null : DescriviRuolo(ruolo))">
+                                <MudSelectItem T="int" Value="0">Nessun accesso</MudSelectItem>
+                                @foreach (var r in Ruoli)
+                                {
+                                    <MudSelectItem T="int" Value="r.Id">@r.Nome</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </div>
+                    }
+                </MudStack>
+            }
+
+            @if (!string.IsNullOrEmpty(_errore))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_errore</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()" Disabled="_inCorso">Annulla</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Salva" Disabled="_inCorso">
+            @if (_inCorso)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Salva
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter, EditorRequired] public AppAccount Account { get; set; } = default!;
+    [Parameter] public List<Evento> Eventi { get; set; } = new();
+    [Parameter] public List<Ruolo> Ruoli { get; set; } = new();
+
+    /// <summary>Accessi attuali di questo account.</summary>
+    [Parameter] public List<AccountEvento> Accessi { get; set; } = new();
+
+    private Dictionary<int, int> _attuali = new();
+    private Dictionary<int, int> _scelte = new();
+    private int _ruoloRapido;
+    private bool _inCorso;
+    private string? _errore;
+
+    protected override void OnInitialized()
+    {
+        _attuali = Accessi.Where(a => a.AccountId == Account.Id).ToDictionary(a => a.EventId, a => a.RuoloId);
+        _scelte = Eventi.ToDictionary(e => e.Id, e => _attuali.TryGetValue(e.Id, out var r) ? r : 0);
+    }
+
+    private bool Modificato(int eventId) =>
+        (_attuali.TryGetValue(eventId, out var attuale) ? attuale : 0) != _scelte[eventId];
+
+    private static string DescriviRuolo(Ruolo r) =>
+        !string.IsNullOrWhiteSpace(r.Descrizione)
+            ? r.Descrizione!
+            : r.Permessi.Count == 0 ? "Nessun permesso" : string.Join(", ", r.Permessi.Select(AdminLogica.NomePermesso));
+
+    private void ApplicaATutti(bool ancheArchiviati)
+    {
+        foreach (var e in Eventi.Where(e => ancheArchiviati || e.IsActive == 1))
+            _scelte[e.Id] = _ruoloRapido;
+    }
+
+    private async Task Salva()
+    {
+        if (_inCorso)
+            return;
+
+        _inCorso = true;
+        _errore = null;
+        try
+        {
+            var desiderati = _scelte.ToDictionary(s => s.Key, s => s.Value == 0 ? (int?)null : s.Value);
+            var modifiche = await AdminController.SalvaAccessiAsync(Account.Id, _attuali, desiderati);
+            MudDialog.Close(DialogResult.Ok(modifiche));
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+            // Alcune modifiche potrebbero essere già salvate: il chiamante ricarica comunque
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+}

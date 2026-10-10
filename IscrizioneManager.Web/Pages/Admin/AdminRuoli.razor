@@ -1,0 +1,195 @@
+@page "/admin/ruoli"
+@inject AppState AppState
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>Ruoli e permessi - Portale AC</PageTitle>
+
+<PaginaProtetta RichiedeSuperadmin="true" RichiedeEvento="false">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Class="mb-4" Spacing="2">
+        <div>
+            <MudText Typo="Typo.h5">Ruoli e permessi</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                Un ruolo è un insieme di permessi. A ogni account si assegna un ruolo per ciascun evento.
+            </MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="() => Modifica(null)" Disabled="@(_caricamento || _errore != null)">Nuovo ruolo</MudButton>
+    </MudStack>
+
+    @if (_caricamento)
+    {
+        <MudGrid Spacing="3">
+            @for (var i = 0; i < 3; i++)
+            {
+                <MudItem xs="12" md="6" lg="4">
+                    <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="160px" />
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else if (_errore != null)
+    {
+        <MudAlert Severity="Severity.Error">
+            Impossibile caricare i ruoli: @_errore
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" OnClick="CaricaAsync" Class="ml-2">Riprova</MudButton>
+        </MudAlert>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+            I permessi sono verificati anche dal database. "Inserire e modificare iscrizioni" include la visione della
+            scheda sanitaria; i super amministratori hanno sempre tutti i permessi.
+        </MudAlert>
+
+        @if (_ruoli.Count == 0)
+        {
+            <MudText Class="mud-text-secondary">Nessun ruolo: creane uno con "Nuovo ruolo".</MudText>
+        }
+
+        <MudGrid Spacing="3">
+            @foreach (var r in _ruoli)
+            {
+                var ruolo = r;
+                var usi = _accessi.Count(a => a.RuoloId == ruolo.Id);
+                var account = _accessi.Where(a => a.RuoloId == ruolo.Id).Select(a => a.AccountId).Distinct().Count();
+                <MudItem xs="12" md="6" lg="4">
+                    <MudCard Outlined="true" Style="height:100%">
+                        <MudCardHeader>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">@ruolo.Nome</MudText>
+                                @if (!string.IsNullOrWhiteSpace(ruolo.Descrizione))
+                                {
+                                    <MudText Typo="Typo.body2" Class="mud-text-secondary">@ruolo.Descrizione</MudText>
+                                }
+                            </CardHeaderContent>
+                            <CardHeaderActions>
+                                <MudIconButton Icon="@Icons.Material.Outlined.Edit" aria-label="Modifica" Disabled="_inCorso"
+                                               OnClick="() => Modifica(ruolo)" />
+                                <MudTooltip Text="@(usi > 0 ? "In uso: non si può eliminare" : "Elimina")">
+                                    <MudIconButton Icon="@Icons.Material.Outlined.Delete" aria-label="Elimina" Color="Color.Error"
+                                                   Disabled="@(_inCorso || usi > 0)" OnClick="() => Elimina(ruolo)" />
+                                </MudTooltip>
+                            </CardHeaderActions>
+                        </MudCardHeader>
+                        <MudCardContent Class="pt-0">
+                            @if (ruolo.Permessi.Count == 0)
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Warning">Nessun permesso</MudText>
+                            }
+                            else
+                            {
+                                @foreach (var gruppo in AdminLogica.GruppiPermessi())
+                                {
+                                    var attivi = gruppo.Where(p => ruolo.Permessi.Contains(p.Chiave)).ToList();
+                                    @if (attivi.Count > 0)
+                                    {
+                                        <MudText Typo="Typo.overline" Class="d-block" Style="line-height:1.6">@gruppo.Key</MudText>
+                                        <div class="d-flex flex-wrap gap-1 mb-1">
+                                            @foreach (var p in attivi)
+                                            {
+                                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@p.Nome</MudChip>
+                                            }
+                                        </div>
+                                    }
+                                }
+                            }
+                            <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">
+                                @(usi == 0 ? "Non assegnato" : $"Assegnato a {account} account in {usi} {(usi == 1 ? "accesso" : "accessi")} account/evento")
+                            </MudText>
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</PaginaProtetta>
+
+@code {
+    private List<Ruolo> _ruoli = new();
+    private List<AccountEvento> _accessi = new();
+    private bool _caricamento = true;
+    private bool _inCorso;
+    private string? _errore;
+
+    protected override async Task OnInitializedAsync() => await CaricaAsync();
+
+    private async Task CaricaAsync()
+    {
+        _caricamento = _ruoli.Count == 0;
+        _errore = null;
+        try
+        {
+            var ruoli = AdminController.GetRuoliAsync();
+            var accessi = AdminController.GetAccessiAsync();
+            await Task.WhenAll(ruoli, accessi);
+            _ruoli = ruoli.Result;
+            _accessi = accessi.Result;
+        }
+        catch (Exception ex)
+        {
+            _errore = AdminLogica.MessaggioErrore(ex);
+        }
+        finally
+        {
+            _caricamento = false;
+        }
+    }
+
+    private async Task Modifica(Ruolo? ruolo)
+    {
+        var parametri = new DialogParameters<RuoloDialog>
+        {
+            { d => d.Originale, ruolo },
+            { d => d.Esistenti, _ruoli },
+            { d => d.Usi, ruolo == null ? 0 : _accessi.Count(a => a.RuoloId == ruolo.Id) },
+        };
+        var rif = await DialogService.ShowAsync<RuoloDialog>(ruolo == null ? "Nuovo ruolo" : $"Ruolo {ruolo.Nome}", parametri,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var esito = await rif.Result;
+        if (esito is not { Canceled: false, Data: Ruolo })
+            return;
+
+        Snackbar.Add(ruolo == null ? "Ruolo creato" : "Ruolo salvato", Severity.Success);
+        await CaricaAsync();
+        await AggiornaSessioneAsync();
+    }
+
+    private async Task Elimina(Ruolo ruolo)
+    {
+        var conferma = await DialogService.ShowMessageBoxAsync("Elimina ruolo",
+            (MarkupString)$"Eliminare il ruolo <b>{System.Net.WebUtility.HtmlEncode(ruolo.Nome)}</b>?",
+            yesText: "Elimina", cancelText: "Annulla");
+        if (conferma != true)
+            return;
+
+        _inCorso = true;
+        try
+        {
+            await AdminController.EliminaRuoloAsync(ruolo.Id);
+            _ruoli.Remove(ruolo);
+            Snackbar.Add("Ruolo eliminato", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(AdminLogica.MessaggioErrore(ex), Severity.Error);
+            await CaricaAsync();
+        }
+        finally
+        {
+            _inCorso = false;
+        }
+    }
+
+    private async Task AggiornaSessioneAsync()
+    {
+        try
+        {
+            await AppState.RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Aggiornamento dei permessi non riuscito: " + ex.Message, Severity.Warning);
+        }
+    }
+}
