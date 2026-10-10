@@ -4,6 +4,7 @@ public interface ISquadraBambinoRepository
 {
   /// <summary>Squadre dell'evento corrente con i bambini; l'ultima è "Senza squadra" (Id 0).</summary>
   Task<List<Squadra>> GetSquadreAsync();
+  /// <summary>Sposta un bambino (newSquadraId 0 = senza squadra) nell'evento corrente, in modo atomico.</summary>
   Task SetSquadraAsync(int bambinoId, int newSquadraId);
   Task SaveAllAssignmentsAsync(List<Squadra> squadre);
 

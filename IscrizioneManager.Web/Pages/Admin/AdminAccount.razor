@@ -225,15 +225,22 @@
         var rif = await DialogService.ShowAsync<AccountEventiDialog>($"Eventi e ruoli - {account.Nome}", parametri,
             new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         var esito = await rif.Result;
-        if (esito is null || esito.Canceled)
-            return;
 
-        if (esito.Data is int modifiche)
-            Snackbar.Add(modifiche == 0 ? "Nessuna modifica" : "Accessi salvati", modifiche == 0 ? Severity.Info : Severity.Success);
-
-        _accessi = await AdminController.GetAccessiAsync();
+        // Ricarica anche su Annulla: dopo un errore a metà alcune modifiche
+        // possono essere già salvate e il conteggio in tabella sarebbe vecchio.
+        try
+        {
+            _accessi = await AdminController.GetAccessiAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Aggiornamento degli accessi non riuscito: " + AdminLogica.MessaggioErrore(ex), Severity.Warning);
+        }
         if (account.Id == IoId)
             await AggiornaSessioneAsync();
+
+        if (esito is { Canceled: false, Data: int modifiche })
+            Snackbar.Add(modifiche == 0 ? "Nessuna modifica" : "Accessi salvati", modifiche == 0 ? Severity.Info : Severity.Success);
     }
 
     private async Task Rinomina(AppAccount account)

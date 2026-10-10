@@ -33,6 +33,12 @@ public class SupabaseDashboardRepository : IDashboardRepository
         return result.Models.Select(b => b.Id).ToList();
     }
 
+    public async Task<List<int>> GetIdBambiniSquadreAsync()
+    {
+        var bambini = await SupabaseSquadraBambinoRepository.LeggiBambiniAsync(ClientHolder.Client._eventId);
+        return bambini.Select(b => b.IdBambino).ToList();
+    }
+
     public async Task<List<Squadra>> GetSquadreAsync()
     {
         var result = await ClientHolder.Client

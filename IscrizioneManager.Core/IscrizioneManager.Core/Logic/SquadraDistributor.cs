@@ -85,4 +85,59 @@ public static class SquadraDistributor
 
     return righe;
   }
+
+  /// <summary>
+  /// Costruisce le squadre con i loro bambini (ordinati). L'ultima è "Senza squadra",
+  /// che raccoglie anche chi punta a una squadra non più esistente.
+  /// </summary>
+  public static List<Squadra> Componi(
+    IEnumerable<Squadra> squadre,
+    IEnumerable<BambinoSquadre> bambini,
+    IEnumerable<SquadraBambino> assegnazioni,
+    IReadOnlyDictionary<int, string> descrizioniAnno)
+  {
+    var elenco = bambini
+      .GroupBy(b => b.IdBambino)
+      .Select(g => g.First())
+      .ToList();
+    var squadraPerBambino = assegnazioni
+      .GroupBy(sb => sb.IdBambino)
+      .ToDictionary(g => g.Key, g => g.First().IdSquadra);
+
+    Bambino Crea(BambinoSquadre x) => new()
+    {
+      Id = x.IdBambino,
+      Nome = x.Nome ?? string.Empty,
+      Cognome = x.Cognome ?? string.Empty,
+      Anno = x.Anno,
+      AnnoDesc = x.Anno.HasValue ? descrizioniAnno.GetValueOrDefault(x.Anno.Value, "") : ""
+    };
+
+    var risultato = squadre.ToList();
+    var idSquadre = risultato.Select(s => s.Id).ToHashSet();
+
+    foreach (var s in risultato)
+    {
+      s.Bambini = elenco
+        .Where(b => squadraPerBambino.TryGetValue(b.IdBambino, out var id) && id == s.Id)
+        .Select(Crea)
+        .ToList();
+      s.OrdinaBambini();
+    }
+
+    var senzaSquadra = new Squadra
+    {
+      Id = Squadra.IdSenzaSquadra,
+      Nome = Squadra.NomeSenzaSquadra,
+      Color = Squadra.ColoreSenzaSquadra,
+      Bambini = elenco
+        .Where(b => !squadraPerBambino.TryGetValue(b.IdBambino, out var id) || !idSquadre.Contains(id))
+        .Select(Crea)
+        .ToList()
+    };
+    senzaSquadra.OrdinaBambini();
+
+    risultato.Add(senzaSquadra);
+    return risultato;
+  }
 }

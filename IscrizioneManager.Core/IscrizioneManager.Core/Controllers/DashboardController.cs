@@ -19,7 +19,10 @@ public class DashboardController
 
         var iscrizioniTask = iscritti ? _repo.GetIscrizioniAsync() : Task.FromResult<List<Iscrizione>>(null!);
         var anniTask = iscritti ? _repo.GetAnniScolasticiAsync() : Task.FromResult<List<AnnoScolastico>>(null!);
-        var bambiniTask = squadre ? _repo.GetIdBambiniAsync() : Task.FromResult<List<int>>(null!);
+        // Senza permessi sugli iscritti la tabella bambino non è leggibile: si usa la RPC delle squadre
+        var bambiniTask = !squadre ? Task.FromResult<List<int>>(null!)
+            : iscritti ? _repo.GetIdBambiniAsync()
+            : _repo.GetIdBambiniSquadreAsync();
         var squadreTask = squadre ? _repo.GetSquadreAsync() : Task.FromResult<List<Squadra>>(null!);
         var assegnazioniTask = squadre ? _repo.GetSquadraBambiniAsync() : Task.FromResult<List<SquadraBambino>>(null!);
 

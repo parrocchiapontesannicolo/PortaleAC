@@ -146,9 +146,14 @@ async function crea(admin: SupabaseClient, body: Record<string, unknown>): Promi
   const password = validaPassword(body.password);
   const isSuperadmin = body.is_superadmin === true;
 
-  const { data: omonimi, error: errNome } = await admin.from("app_account").select("id").ilike("nome", nome.replace(/[\\%_]/g, "\\$&"));
+  // Confronto esatto (senza maiuscole/minuscole) in JS: con ilike PostgREST
+  // tratta '*' come jolly e non si può escludere. Gli account sono pochi.
+  const { data: tutti, error: errNome } = await admin.from("app_account").select("nome");
   if (errNome) throw new HttpError(500, errNome.message);
-  if (omonimi && omonimi.length > 0) throw new HttpError(409, "Esiste già un account con questo nome.");
+  const chiave = nome.toLocaleLowerCase("it");
+  if (tutti?.some((a) => String(a.nome ?? "").trim().toLocaleLowerCase("it") === chiave)) {
+    throw new HttpError(409, "Esiste già un account con questo nome.");
+  }
 
   let ordine = typeof body.ordine === "number" && Number.isInteger(body.ordine) ? body.ordine : null;
   if (ordine === null) {

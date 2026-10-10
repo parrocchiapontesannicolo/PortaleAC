@@ -1,6 +1,7 @@
 using System.Globalization;
 using IscrizioniManager.Data;
 using IscrizioniManager.Models;
+using Newtonsoft.Json;
 using Supabase.Postgrest.Attributes;
 using StjIgnore = System.Text.Json.Serialization.JsonIgnoreAttribute;
 using NjIgnore = Newtonsoft.Json.JsonIgnoreAttribute;
@@ -132,3 +133,22 @@ public class Squadra : EventModel
 }
 
 public record ConteggioAnnoSquadra(int? Anno, string Descrizione, int Numero);
+
+/// <summary>
+/// Riga della RPC squadre_bambini: solo i dati che servono alle squadre
+/// (chi vede solo le squadre non può leggere le tabelle bambino/iscrizione).
+/// </summary>
+public class BambinoSquadre
+{
+  [JsonProperty("id_bambino")]
+  public int IdBambino { get; set; }
+
+  [JsonProperty("nome")]
+  public string? Nome { get; set; }
+
+  [JsonProperty("cognome")]
+  public string? Cognome { get; set; }
+
+  [JsonProperty("anno")]
+  public int? Anno { get; set; }
+}

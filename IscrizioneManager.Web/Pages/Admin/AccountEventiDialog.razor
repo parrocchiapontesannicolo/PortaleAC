@@ -141,11 +141,28 @@
         catch (Exception ex)
         {
             _errore = AdminLogica.MessaggioErrore(ex);
-            // Alcune modifiche potrebbero essere già salvate: il chiamante ricarica comunque
+            // Alcune modifiche potrebbero essere già salvate: rilegge gli accessi attuali
+            // così un nuovo salvataggio (anche una rimozione) parte dai dati veri.
+            // Il chiamante ricarica comunque alla chiusura.
+            await RileggiAttualiAsync();
         }
         finally
         {
             _inCorso = false;
+        }
+    }
+
+    // Aggiorna solo lo stato "attuale": le scelte fatte nel dialogo restano
+    private async Task RileggiAttualiAsync()
+    {
+        try
+        {
+            var accessi = await AdminController.GetAccessiAsync();
+            _attuali = accessi.Where(a => a.AccountId == Account.Id).ToDictionary(a => a.EventId, a => a.RuoloId);
+        }
+        catch
+        {
+            // Rete ancora assente: resta l'errore già mostrato
         }
     }
 }
