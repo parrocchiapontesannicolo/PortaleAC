@@ -9,6 +9,9 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
 {
     public async Task<bool> CreateAsync(ModuloIscrizioneDto dto)
     {
+        // Evento letto una sola volta: se l'utente cambia evento a metà salvataggio
+        // le richieste successive restano sull'evento di partenza.
+        var eventId = EventoCorrente();
         var payload = new
         {
             p_dto = new
@@ -51,7 +54,7 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
                 Taglia = dto.Taglia,
                 allergie_intolleranze = dto.AllergieIntolleranze,
                 patologie_terapie = dto.PatologieTerapie,
-                event_id = ClientHolder.Client._eventId
+                event_id = eventId
             }
         };
 
@@ -60,12 +63,13 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             return false;
 
         if (dto.Pagato)
-            await AllineaPagatoAsync(bambinoId, true);
+            await AllineaPagatoAsync(eventId, bambinoId, true);
         return true;
     }
 
     public async Task<bool> UpdateAsync(ModuloIscrizioneDto dto)
     {
+        var eventId = EventoCorrente();
         var payload = new
         {
             p_dto = new
@@ -108,7 +112,7 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
                 taglia = dto.Taglia,
                 allergie_intolleranze = dto.AllergieIntolleranze,
                 patologie_terapie = dto.PatologieTerapie,
-                event_id = ClientHolder.Client._eventId
+                event_id = eventId
             },
             p_id_bambino = dto.IdBambino
         };
@@ -117,7 +121,10 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
         if (bambinoId == default)
             return false;
 
-        await AllineaPagatoAsync(dto.IdBambino!.Value, dto.Pagato);
+        // Solo se l'utente l'ha cambiato nel modulo: il valore letto all'apertura
+        // annullerebbe un pagamento segnato nel frattempo dalla lista.
+        if (dto.PagatoModificato)
+            await AllineaPagatoAsync(eventId, dto.IdBambino!.Value, dto.Pagato);
         return true;
     }
 
@@ -131,12 +138,14 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
     public async Task<ModuloIscrizioneDto> GetAsync(int idBambino)
     {
         var client = ClientHolder.Client;
+        // Tutte le letture sullo stesso evento, anche se nel frattempo si cambia evento
+        var eventId = EventoCorrente();
 
-        var bambinoTask = client.GetAll<Bambino>().Select("*").Where(x => x.Id == idBambino).Get();
-        var iscrizioneTask = client.GetAll<Iscrizione>().Select("*").Where(x => x.IdBambino == idBambino).Get();
-        var relGenitoriTask = client.GetAll<GenitoreBambino>().Select("*").Where(x => x.IdBambino == idBambino).Get();
-        var tutteSettimaneTask = client.GetAll<Settimana>().Select("*").Get();
-        var tipiConsensoTask = client.GetAll<TipoConsenso>().Select("*").Get();
+        var bambinoTask = client.BaseFrom<Bambino>().Select("*").Where(x => x.event_id == eventId).Where(x => x.Id == idBambino).Get();
+        var iscrizioneTask = client.BaseFrom<Iscrizione>().Select("*").Where(x => x.event_id == eventId).Where(x => x.IdBambino == idBambino).Get();
+        var relGenitoriTask = client.BaseFrom<GenitoreBambino>().Select("*").Where(x => x.event_id == eventId).Where(x => x.IdBambino == idBambino).Get();
+        var tutteSettimaneTask = client.BaseFrom<Settimana>().Select("*").Where(x => x.event_id == eventId).Get();
+        var tipiConsensoTask = client.BaseFrom<TipoConsenso>().Select("*").Where(x => x.event_id == eventId).Get();
 
         var bambino = (await bambinoTask).Models.FirstOrDefault()
             ?? throw new InvalidOperationException("Iscritto non trovato: potrebbe essere stato eliminato o appartenere a un altro evento.");
@@ -144,13 +153,14 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             ?? throw new InvalidOperationException($"Il bambino {bambino.Cognome} {bambino.Nome} non ha un'iscrizione in questo evento.");
 
         var idIscrizione = iscrizione.Id;
-        var settimaneSceltaTask = client.GetAll<IscrizioneSettimana>().Select("*").Where(x => x.IdIscrizione == idIscrizione).Get();
-        var tagliaTask = client.GetAll<IscrizioneTaglia>().Select("*").Where(x => x.IdIscrizione == idIscrizione).Get();
-        var schedaTask = client.GetAll<SchedaSanitaria>().Select("*").Where(x => x.IdIscrizione == idIscrizione).Get();
-        var consensiTask = client.GetAll<Consenso>().Select("*").Where(x => x.IdIscrizione == idIscrizione).Get();
+        var settimaneSceltaTask = client.BaseFrom<IscrizioneSettimana>().Select("*").Where(x => x.event_id == eventId).Where(x => x.IdIscrizione == idIscrizione).Get();
+        var tagliaTask = client.BaseFrom<IscrizioneTaglia>().Select("*").Where(x => x.event_id == eventId).Where(x => x.IdIscrizione == idIscrizione).Get();
+        var schedaTask = client.BaseFrom<SchedaSanitaria>().Select("*").Where(x => x.event_id == eventId).Where(x => x.IdIscrizione == idIscrizione).Get();
+        var consensiTask = client.BaseFrom<Consenso>().Select("*").Where(x => x.event_id == eventId).Where(x => x.IdIscrizione == idIscrizione).Get();
 
         // Genitori: una sola query per id. Niente filtro sull'evento: in passato si potevano
         // collegare genitori di altri eventi e filtrarli li farebbe perdere al salvataggio.
+        // Se qualcuno non è leggibile il DTO lo segnala e il controller rifiuta il salvataggio.
         var idGenitori = (await relGenitoriTask).Models.Select(r => r.IdGenitore).Distinct().ToList();
         var genitori = new List<Genitore>();
         if (idGenitori.Count > 0)
@@ -211,6 +221,7 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             AnnoScolastico = iscrizione.Anno,
             Note = iscrizione.Note,
             Genitori = genitoriDto,
+            GenitoriNonLeggibili = idGenitori.Count - genitoriDto.Count,
             Settimane = settimane,
             Taglia = idTaglia,
             AllergieIntolleranze = scheda?.AllergieIntolleranze,
@@ -221,6 +232,7 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             ModalitaPagamentoSelezionata = iscrizione.ModalitaPagamento,
             FormatoIscrizioneSelezionato = iscrizione.FormatoIscrizione,
             Pagato = iscrizione.Pagato,
+            PagatoIniziale = iscrizione.Pagato,
             ScontoFratelli = iscrizione.ScontoFratelli,
             Ricevuta = iscrizione.Ricevuta,
             DescRicevuta = iscrizione.DescRicevuta,
@@ -231,21 +243,31 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
         };
     }
 
+    private static int EventoCorrente()
+    {
+        var eventId = ClientHolder.Client._eventId;
+        if (eventId <= 0)
+            throw new InvalidOperationException("Nessun evento selezionato.");
+        return eventId;
+    }
+
     /// <summary>
     /// Il flag "pagato" non passa da create/update_iscrizione: lo allinea con
     /// set_pagato solo se il valore sul database è diverso.
     /// </summary>
-    private static async Task AllineaPagatoAsync(int idBambino, bool pagato)
+    private static async Task AllineaPagatoAsync(int eventId, int idBambino, bool pagato)
     {
         try
         {
             var iscrizione = (await ClientHolder.Client
-                .GetAll<Iscrizione>()
+                .BaseFrom<Iscrizione>()
                 .Select("*")
-                .Where(x => x.IdBambino == idBambino)
+                .Where(x => x.event_id == eventId).Where(x => x.IdBambino == idBambino)
                 .Get()).Models.OrderByDescending(x => x.Id).FirstOrDefault();
 
-            if (iscrizione != null && iscrizione.Pagato != pagato)
+            if (iscrizione == null)
+                throw new InvalidOperationException("iscrizione non trovata dopo il salvataggio.");
+            if (iscrizione.Pagato != pagato)
                 await IscrittiListaController.AggiornaPagatoAsync(iscrizione.Id, pagato);
         }
         catch (Exception ex)

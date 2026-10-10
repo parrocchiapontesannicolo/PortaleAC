@@ -31,7 +31,7 @@ else
 {
     var meta = _dati.Metadata;
 
-    <MudForm @ref="_form" Model="FormModel" ReadOnly="SolaLettura" Disabled="Disabled">
+    <MudForm @ref="_form" Model="FormModel" ReadOnly="SolaLettura" Disabled="Disabled" FieldChanged="@(_ => NotificaModificaAsync())">
         <MudStack Spacing="3">
 
             @* ================= BAMBINO ================= *@
@@ -435,6 +435,12 @@ else
     /// <summary>Disabilita i campi durante il salvataggio.</summary>
     [Parameter] public bool Disabled { get; set; }
 
+    /// <summary>
+    /// Chiamato a ogni modifica dell'utente: i campi sono legati qui dentro, quindi
+    /// senza questo la pagina non si ridisegna (es. avviso alla chiusura della scheda).
+    /// </summary>
+    [Parameter] public EventCallback OnModificato { get; set; }
+
     private MudForm? _form;
     private DatiModulo? _dati;
     private bool _caricamento = true;
@@ -531,7 +537,8 @@ else
         if (_form != null)
             await _form.ValidateAsync();
 
-        _errori = ModuloIscrizioneValidator.Validate(FormModel)
+        // Con i metadati i controlli ignorano le sezioni nascoste dall'evento
+        _errori = ModuloIscrizioneValidator.Validate(FormModel, _dati?.Metadata)
             .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .ToList();
         StateHasChanged();
@@ -585,22 +592,29 @@ else
     private static string? ValidaEmail(string? email) =>
         ModuloIscrizioneValidator.IsEmailValida(email) ? null : "Indirizzo email non valido";
 
-    private void ToggleSettimana(Settimana variante)
+    private Task NotificaModificaAsync() => OnModificato.InvokeAsync();
+
+    private async Task ToggleSettimana(Settimana variante)
     {
         if (SolaLettura || Disabled)
             return;
         SettimaneModulo.Seleziona(FormModel.Settimane, variante, !variante.IsSelected);
+        await NotificaModificaAsync();
     }
 
-    private void AggiungiGenitore()
+    private async Task AggiungiGenitore()
     {
         if (FormModel.Genitori.Count < MaxGenitori)
+        {
             FormModel.Genitori.Add(new GenitoreDto());
+            await NotificaModificaAsync();
+        }
     }
 
-    private void RimuoviGenitore(GenitoreDto genitore)
+    private async Task RimuoviGenitore(GenitoreDto genitore)
     {
         FormModel.Genitori.Remove(genitore);
+        await NotificaModificaAsync();
     }
 
     // ---------- Ricerca genitori già registrati (solo evento corrente) ----------
@@ -647,8 +661,9 @@ else
         }
     }
 
-    private void SelezionaGenitore(GenitoreDto trovato)
+    private async Task SelezionaGenitore(GenitoreDto trovato)
     {
+        var modificato = _genitoreCorrente != null;
         if (_genitoreCorrente != null)
         {
             _genitoreCorrente.IdGenitore = trovato.IdGenitore;
@@ -659,6 +674,8 @@ else
             _genitoreCorrente.Existing = true;
         }
         ChiudiRicerca();
+        if (modificato)
+            await NotificaModificaAsync();
     }
 
     private void ChiudiRicerca()

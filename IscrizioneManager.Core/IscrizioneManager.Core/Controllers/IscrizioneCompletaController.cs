@@ -41,8 +41,16 @@ public class IscrizioneCompletaController
     {
         if (dto == null) throw new ArgumentNullException(nameof(dto));
         if (dto.IdBambino == null || dto.IdBambino <= 0) throw new ArgumentException("Iscrizione da modificare non valida", nameof(dto));
+        // update_iscrizione riscrive i collegamenti: senza tutti i genitori li perderebbe
+        if (dto.GenitoriNonLeggibili > 0) throw new InvalidOperationException(MessaggioGenitoriNonLeggibili(dto.GenitoriNonLeggibili));
         return await _repo.UpdateAsync(dto);
     }
+
+    public static string MessaggioGenitoriNonLeggibili(int quanti) =>
+        (quanti == 1
+            ? "Un genitore collegato a questo iscritto non è visibile con i tuoi permessi"
+            : $"{quanti} genitori collegati a questo iscritto non sono visibili con i tuoi permessi")
+        + ": salvando si perderebbe il collegamento. Chiedi a un amministratore di sistemare l'iscrizione.";
 
     public static async Task<bool> DeleteAsync(int idBambino)
     {
