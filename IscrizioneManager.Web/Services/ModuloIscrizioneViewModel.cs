@@ -1,48 +1,40 @@
-﻿using IscrizioneManager.Core.Models;
+using IscrizioneManager.Core.Models;
 using IscrizioneManager.Core.Services;
 
 namespace IscrizioneManager.Web.Services
 {
+  /// <summary>Dati di riferimento del modulo iscrizione per l'evento corrente.</summary>
+  public record DatiModulo(
+    EventoMetadata Metadata,
+    List<AnnoScolastico> AnniScolastici,
+    List<Settimana> Settimane,
+    List<Taglia> Taglie,
+    List<ConsensoDto> Consensi);
+
   public class ModuloIscrizioneViewModel
   {
+    /// <summary>Carica in parallelo tutto quello che serve al modulo.</summary>
+    public async Task<DatiModulo> CaricaDatiAsync()
+    {
+      var metadataTask = IscrizioneCompletaController.GetEventMetadataAsync();
+      var settimaneTask = GetSettimaneAsync();
+      var taglieTask = GetTaglieAsync();
+      var consensiTask = GetConsensiAsync();
+
+      var metadata = await metadataTask;
+      var anni = await IscrizioneCompletaController.GetAnniScolasticiAsync(IscrizioneCompletaController.GradiAmmessi(metadata));
+
+      return new DatiModulo(metadata, anni, await settimaneTask, await taglieTask, await consensiTask);
+    }
 
     public async Task<List<Settimana>> GetSettimaneAsync()
     {
       var settimane = await ClientHolder.Client
- .GetAll<Settimana>()
- .Select("*")
- .Get();
+        .GetAll<Settimana>()
+        .Select("*")
+        .Get();
 
-      var result = new List<Settimana>();
-      foreach (var t in settimane.Models)
-      {
-        if (t.CostoIntero != null)
-        {
-          result.Add(new Settimana()
-          {
-            Id = t.Id,
-            Desc = $"{t.Desc} (Con pranzo)",
-            CostoIntero = t.CostoIntero,
-            CostoBase = null,
-            DataInizio = t.DataInizio,
-            DataFine = t.DataFine
-          });
-        }
-        if (t.CostoBase != null)
-        {
-          result.Add(new Settimana()
-          {
-            Id = -t.Id,
-            Desc = $"{t.Desc} (Senza pranzo)",
-            CostoIntero = null,
-            CostoBase = t.CostoBase,
-            DataInizio = t.DataInizio,
-            DataFine = t.DataFine
-          });
-        }
-      }
-
-      return result;
+      return SettimaneModulo.Espandi(settimane.Models);
     }
 
     public async Task<List<Taglia>> GetTaglieAsync()
@@ -51,7 +43,7 @@ namespace IscrizioneManager.Web.Services
         .GetAll<Taglia>()
         .Select("*")
         .Get();
-      return taglie.Models;
+      return taglie.Models.OrderBy(x => x.Id).ToList();
     }
 
     public async Task<List<ConsensoDto>> GetConsensiAsync()
@@ -61,24 +53,37 @@ namespace IscrizioneManager.Web.Services
         .Select("*")
         .Get();
 
-      return tipiConsensi.Models.Select(x => new ConsensoDto() { IdTipoConsenso = x.Id, Descrizione = x.Descrizione }).ToList();
+      return tipiConsensi.Models
+        .OrderBy(x => x.Id)
+        .Select(x => new ConsensoDto() { IdTipoConsenso = x.Id, Descrizione = x.Descrizione })
+        .ToList();
     }
 
+    /// <summary>Genitori già registrati, solo dell'evento corrente.</summary>
     public async Task<List<GenitoreDto>> GetGenitoriListAsync()
     {
+      var eventId = ClientHolder.Client._eventId;
       var genitori = await ClientHolder.Client
-       .BaseFrom<Genitore>()
-       .Select("*")
-       .Get();
+        .BaseFrom<Genitore>()
+        .Select("*")
+        .Where(x => x.event_id == eventId)
+        .Get();
 
-      return genitori.Models?.Select(x => new GenitoreDto
-      {
-        IdGenitore = x.Id,
-        Nome = x.Nome,
-        Cognome = x.Cognome,
-        Telefono = x.Telefono,
-        Genere = x.Genere
-      })?.ToList() ?? new List<GenitoreDto>();
+      return genitori.Models
+        .GroupBy(x => x.Id)
+        .Select(g => g.First())
+        .OrderBy(x => x.Cognome, StringComparer.CurrentCultureIgnoreCase)
+        .ThenBy(x => x.Nome, StringComparer.CurrentCultureIgnoreCase)
+        .Select(x => new GenitoreDto
+        {
+          IdGenitore = x.Id,
+          Nome = x.Nome,
+          Cognome = x.Cognome,
+          Telefono = x.Telefono,
+          Genere = x.Genere,
+          Existing = true
+        })
+        .ToList();
     }
   }
 }

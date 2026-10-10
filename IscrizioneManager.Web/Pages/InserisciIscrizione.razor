@@ -1,104 +1,154 @@
-﻿@page "/inserisciIscrizione"
-@using IscrizioneManager.Core.Utils
-<link href="css/InserisciIscrizione.css" rel="stylesheet" />
+@page "/iscritti/nuovo"
+@page "/inserisciIscrizione"
+@using IscrizioneManager.Core.Repositories
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IJSRuntime JS
 
-<div class="header-iscrizione">
-    <h2>Nuova Iscrizione</h2>
-    <button class="btn-chiudi" @onclick="TornaIndietro" title="Chiudi">×</button>
-</div>
+<PageTitle>Nuova iscrizione - Portale AC</PageTitle>
 
-<ModuloIscrizioneView FormModel="newIscrizione" OnSubmitCallback="SalvaIscrizione" IsSubmitting="IsSubmitting" IsReadOnly="IsReadOnly" />
+<PaginaProtetta Permessi="@(new[] { Permessi.IscrittiEdit })">
+    <NavigationLock OnBeforeInternalNavigation="ConfermaUscitaAsync" ConfirmExternalNavigation="HaModifiche" />
 
-@if (showErrorPopup)
-{
-    <div class="error-popup-overlay">
-        <div class="error-popup-content">
-            <button class="error-popup-close" @onclick="CloseErrorPopup">×</button>
-            <h3>Errore durante il salvataggio</h3>
-            <p style="white-space: pre-wrap;">@errorMessage</p>
-        </div>
+    <div class="d-flex align-center gap-1 mb-3">
+        <MudTooltip Text="Torna alla lista">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@Rotte.Iscritti" aria-label="Torna alla lista" />
+        </MudTooltip>
+        <MudText Typo="Typo.h5">Nuova iscrizione</MudText>
     </div>
-}
 
-@if (succededPopup)
-{
-    <div class="succeded-popup-overlay">
-        <div class="succeded-popup-content">
-            <h3>Salvataggio completato</h3>
-            <p>Vuoi inserire un'ulteriore iscrizione?</p>
-            <div class="popup-buttons">
-                <button class="btn-yes" @onclick="InserisciNuova">Sì</button>
-                <button class="btn-no" @onclick="TornaIndietro">No</button>
-            </div>
-        </div>
-    </div>
-}
+    @if (_salvata != null)
+    {
+        <MudPaper Outlined="true" Class="pa-6 mx-auto" MaxWidth="560px">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Style="font-size: 4rem" />
+                <MudText Typo="Typo.h6" Align="Align.Center">Iscrizione salvata</MudText>
+                <MudText Typo="Typo.body1" Align="Align.Center">Iscrizione registrata per <b>@_salvata</b>.</MudText>
+                @if (_avviso != null)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true">@_avviso</MudAlert>
+                }
+                <MudStack Row="true" Wrap="Wrap.Wrap" Justify="Justify.Center" Spacing="2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+                               OnClick="InserisciAltraAsync">Inserisci un'altra</MudButton>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.List"
+                               Href="@Rotte.Iscritti">Vai alla lista</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>
+    }
+    else
+    {
+        <ModuloIscrizioneView @key="_versione" @ref="_modulo" FormModel="_modello" Disabled="_salvataggio" />
+
+        <MudPaper Elevation="4" Class="d-flex justify-end align-center gap-2 pa-2 mt-3"
+                  Style="position: sticky; bottom: 8px; z-index: 5">
+            <MudButton Variant="Variant.Text" Href="@Rotte.Iscritti" Disabled="_salvataggio">Annulla</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_salvataggio" OnClick="SalvaAsync"
+                       StartIcon="@(_salvataggio ? null : Icons.Material.Filled.Save)">
+                @if (_salvataggio)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Salvataggio…</span>
+                }
+                else
+                {
+                    <span>Salva iscrizione</span>
+                }
+            </MudButton>
+        </MudPaper>
+    }
+</PaginaProtetta>
 
 @code {
-    private ModuloIscrizioneDto newIscrizione = new();
+    private ModuloIscrizioneDto _modello = new();
+    private ModuloIscrizioneView? _modulo;
+    private int _versione;
+    private bool _salvataggio;
+    private string? _salvata;
+    private string? _avviso;
 
-    [Inject]
-    private NavigationManager Navigation { get; set; } = default!;
+    private bool HaModifiche => _salvata == null && (
+        !string.IsNullOrWhiteSpace(_modello.Cognome) ||
+        !string.IsNullOrWhiteSpace(_modello.Nome) ||
+        _modello.Genitori.Count > 0 ||
+        !string.IsNullOrWhiteSpace(_modello.Note));
 
-    private bool showErrorPopup = false;
-    private bool succededPopup = false;
-    private string errorMessage = string.Empty;
-    private bool IsReadOnly = false;
-    private bool IsSubmitting = false;
-
-    private async Task SalvaIscrizione(ModuloIscrizioneDto model)
+    private async Task SalvaAsync()
     {
-        IsSubmitting = true; // disabilita il form
-        IsReadOnly = true;
-        bool succeded = false;
+        if (_salvataggio || _modulo == null)
+            return;
+
+        if (!await _modulo.ValidaAsync())
+        {
+            Snackbar.Add("Controlla i campi evidenziati prima di salvare.", Severity.Warning);
+            return;
+        }
+
+        _salvataggio = true;
         try
         {
-            var validate = ModuloIscrizioneValidator.Validate(model);
-            if (validate != "")
-                throw new Exception(validate);
-
-            if (model.IdBambino != null)
-            {
-                succeded = await IscrizioneCompletaController.UpdateAsync(model);
-            }
+            if (await IscrizioneCompletaController.CreateAsync(_modello))
+                await ConcludiAsync(null);
             else
-            {
-                succeded = await IscrizioneCompletaController.CreateAsync(model);
-            }
-
-            if(succeded){
-                succededPopup = true; // mostra popup di successo
-            }
+                Snackbar.Add("Il server non ha confermato il salvataggio: controlla la lista iscritti prima di riprovare.", Severity.Warning);
+        }
+        catch (PagatoNonAggiornatoException ex)
+        {
+            await ConcludiAsync(ex.Message);
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message; // salva il messaggio da mostrare
-            showErrorPopup = true;      // mostra popup
-            Console.WriteLine($"Errore durante il salvataggio: {ex.Message}");
+            Snackbar.Add($"Errore durante il salvataggio: {ex.Message}", Severity.Error);
         }
-
-        if (succeded)
+        finally
         {
-            Console.WriteLine($"Salvata iscrizione: {model.Nome} {model.Cognome}");
+            _salvataggio = false;
         }
-
-        IsSubmitting = false;
-        IsReadOnly = false;
     }
 
-    private void InserisciNuova()
-    { 
-        Navigation.NavigateTo("inserisciIscrizione", true); // ricarica la pagina per inserire una nuova iscrizione
-    }
-
-    private void CloseErrorPopup()
+    private async Task ConcludiAsync(string? avviso)
     {
-        showErrorPopup = false;
-        errorMessage = string.Empty;
+        _salvata = _modello.NomeCompleto;
+        _avviso = avviso;
+        Snackbar.Add($"Iscrizione di {_salvata} salvata", Severity.Success);
+        if (avviso != null)
+            Snackbar.Add(avviso, Severity.Warning);
+        await TornaInCimaAsync();
     }
 
-    private void TornaIndietro()
+    /// <summary>Svuota il modulo senza ricaricare la pagina.</summary>
+    private async Task InserisciAltraAsync()
     {
-        Navigation.NavigateTo("", true);
+        _modello = new ModuloIscrizioneDto();
+        _versione++;
+        _salvata = null;
+        _avviso = null;
+        await TornaInCimaAsync();
+    }
+
+    private async Task ConfermaUscitaAsync(LocationChangingContext contesto)
+    {
+        if (!HaModifiche)
+            return;
+
+        var esci = await DialogService.ShowMessageBoxAsync("Uscire senza salvare?",
+            "L'iscrizione non è ancora stata salvata: i dati inseriti andranno persi.",
+            yesText: "Esci", cancelText: "Resta");
+        if (esci != true)
+            contesto.PreventNavigation();
+    }
+
+    private async Task TornaInCimaAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("scrollTo", 0, 0);
+        }
+        catch (JSException)
+        {
+            // non essenziale
+        }
     }
 }

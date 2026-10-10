@@ -11,7 +11,9 @@ public class SupabaseEventMetadataRepository : IEventMetadataRepository
             .GetAll<EventoMetadata>()
             .Select("*")
             .Get();
-        return result.Model;
+
+        // Evento senza configurazione: tutte le sezioni opzionali spente
+        return result.Model ?? new EventoMetadata { event_id = ClientHolder.Client._eventId };
     }
 
     public async Task<List<AnnoScolastico>> GetAnniScolasticiAsync(int[] gradiAmmessi)
@@ -20,6 +22,9 @@ public class SupabaseEventMetadataRepository : IEventMetadataRepository
             .BaseFrom<AnnoScolastico>()
             .Select("*")
             .Get();
-        return result.Models.Where(x => gradiAmmessi.Contains(x.GradoScuola)).OrderBy(x => x.Id).ToList();
+        return result.Models
+            .Where(x => gradiAmmessi.Length == 0 || gradiAmmessi.Contains(x.GradoScuola))
+            .OrderBy(x => x.Id)
+            .ToList();
     }
 }

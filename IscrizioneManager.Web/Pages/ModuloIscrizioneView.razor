@@ -1,608 +1,670 @@
-﻿@using IscrizioneManager.Core.Models
+@* Modulo iscrizione condiviso tra "Nuova iscrizione" e "Dettaglio iscritto".
+   I pulsanti di salvataggio sono nelle pagine: qui ci sono i campi e ValidaAsync(). *@
+@using System.Globalization
+@using IscrizioneManager.Core.Models
+@using IscrizioneManager.Core.Utils
 @using IscrizioneManager.Web.Services
-@using IscrizioniManager.Items
-@using IscrizioniManager.Models
-@using Newtonsoft.Json
-<link href="css/ModuloIscrizioneView.css" rel="stylesheet" />
+@inject ModuloIscrizioneViewModel ViewModel
+@inject AppState AppState
 
-<EditForm Model="FormModel" OnValidSubmit="HandleSubmit">
-    <DataAnnotationsValidator />
-    <ValidationSummary />
-    <LoadingView @ref="LoadingOverlay" />
+@if (_caricamento)
+{
+    <MudStack Spacing="3">
+        @for (var i = 0; i < 3; i++)
+        {
+            <MudPaper Outlined="true" Class="pa-4">
+                <MudSkeleton Width="35%" Height="28px" />
+                <MudSkeleton Height="52px" />
+                <MudSkeleton Height="52px" />
+            </MudPaper>
+        }
+    </MudStack>
+}
+else if (_erroreCaricamento != null || _dati == null)
+{
+    <MudAlert Severity="Severity.Error">
+        Impossibile caricare il modulo: @_erroreCaricamento
+        <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" Class="ml-2" OnClick="CaricaAsync">Riprova</MudButton>
+    </MudAlert>
+}
+else
+{
+    var meta = _dati.Metadata;
 
-    <div class="form-container @(IsLoading ? "hidden" : "")">
-        <!-- ================= ANAGRAFICA ================= -->
-        <div class="row-flex">
-            <fieldset disabled="@IsReadOnly" class="no-border">
-                <div class="field small">
-                    <label>Cognome</label>
-                    <InputText @bind-Value="FormModel.Cognome" class="form-control" />
-                </div>
-            </fieldset>
-            <fieldset disabled="@IsReadOnly" class="no-border">
+    <MudForm @ref="_form" Model="FormModel" ReadOnly="SolaLettura" Disabled="Disabled">
+        <MudStack Spacing="3">
 
-                <div class="field small">
-                    <label>Nome</label>
-                    <InputText @bind-Value="FormModel.Nome" class="form-control" />
-                </div>
-            </fieldset>
-            <fieldset disabled="@IsReadOnly" class="no-border">
-                <div class="field small">
-                    <label>Data di nascita</label>
-                    <InputDate @bind-Value="FormModel.DataNascita" class="form-control" />
-                </div>
-            </fieldset>
-            <fieldset disabled="@IsReadOnly" class="no-border">
-                <div class="field small">
-                    <label>Genere</label>
-                    <InputSelect @bind-Value="FormModel.Genere" class="form-control">
-                        <option value="">Seleziona</option>
-                        <option value="1">M</option>
-                        <option value="2">F</option>
-                    </InputSelect>
-                </div>
-            </fieldset>
+            @* ================= BAMBINO ================= *@
+            <MudPaper Outlined="true" Class="pa-3 pa-sm-4">
+                @(Intestazione(Icons.Material.Outlined.ChildCare, "Bambino", EtaDesc))
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" @bind-Value="FormModel.Cognome" Label="Cognome" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Required="true" RequiredError="Il cognome è obbligatorio" autocomplete="off" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="string" @bind-Value="FormModel.Nome" Label="Nome" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                      Required="true" RequiredError="Il nome è obbligatorio" autocomplete="off" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField T="DateTime?" @bind-Value="FormModel.DataNascita" Label="Data di nascita" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" InputType="InputType.Date" Format="yyyy-MM-dd" ShrinkLabel="true"
+                                      Required="true" RequiredError="La data di nascita è obbligatoria" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary">Genere *</MudText>
+                        <MudRadioGroup T="int?" @bind-Value="FormModel.Genere" Required="true" RequiredError="Il genere è obbligatorio">
+                            <MudRadio T="int?" Value="1" Color="Color.Primary" Dense="true">Maschio</MudRadio>
+                            <MudRadio T="int?" Value="2" Color="Color.Primary" Dense="true">Femmina</MudRadio>
+                        </MudRadioGroup>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudTextField T="string" @bind-Value="FormModel.LuogoNascita" Label="Luogo di nascita" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudTextField T="string" @bind-Value="FormModel.IndirizzoResidenza" Label="Indirizzo di residenza" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudTextField T="string" @bind-Value="FormModel.ComuneResidenza" Label="Comune di residenza" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
 
-            <button type="button" class="no-border btn-edit @((!IsReadOnly || IsSubmitting) ? "hidden" : "")" @onclick="Modifica">
-                <span class="btn-text">Modifica</span>
-                <img src="images/edit.svg" class="btn-icon" />
-            </button>
-
-            <button type="button" class="no-border btn-edit mobile-fab fab-tertiary btn-delete @((IsReadOnly || FormModel.IdBambino == null) ? "hidden" : "")" @onclick="Elimina">
-                <span class="btn-text">Elimina</span>
-                <img src="images/trash.svg" class="btn-icon" />
-            </button>
-
-            <button type="button" class="no-border btn-edit mobile-fab fab-secondary @((IsReadOnly || FormModel.IdBambino == null) ? "hidden" : "")" style="margin-left: 0" @onclick="AnnulaModifica">
-                <span class="btn-text">Annulla</span>
-                <img src="images/undo.svg" class="btn-icon" />
-            </button>
-        </div>
-
-        <fieldset disabled="@IsReadOnly" class="no-border">
-
-            <div class="row-flex mt">
-                <div class="field medium">
-                    <label>Luogo di nascita</label>
-                    <InputText @bind-Value="FormModel.LuogoNascita" class="form-control" />
-                </div>
-
-                <div class="field large">
-                    <label>Indirizzo di residenza</label>
-                    <InputText @bind-Value="FormModel.IndirizzoResidenza" class="form-control" />
-                </div>
-
-                <div class="field medium">
-                    <label>Comune di residenza</label>
-                    <InputText @bind-Value="FormModel.ComuneResidenza" class="form-control" />
-                </div>
-            </div>
-
-            <!-- ================= GENITORI ================= -->
-            @if (EventMetadata.View_Genitori)
+            @* ================= GENITORI ================= *@
+            @if (meta.View_Genitori || meta.View_MailGenitore)
             {
-                <div class="section mt">
-                    <label>Genitori</label>
-                    <button type="button" class="mb btn-add-genitore @((IsReadOnly || FormModel.Genitori.Count >= 2) ? "hidden" : "")" @onclick="AddGenitore">
-                        Aggiungi Genitore
-                    </button>
+                <MudPaper Outlined="true" Class="pa-3 pa-sm-4">
+                    @(Intestazione(Icons.Material.Outlined.FamilyRestroom, meta.View_Genitori ? "Genitori" : "Contatti",
+                                  meta.View_Genitori ? $"{FormModel.Genitori.Count} di {MaxGenitori}" : null))
 
-                    @if (FormModel.Genitori != null)
+                    @if (meta.View_Genitori)
                     {
-                        @foreach (var genitore in FormModel.Genitori)
+                        @if (FormModel.Genitori.Count == 0)
                         {
-                            <div class="genitore-card">
-                                <div class="field small center">
-                                    <InputText @bind-Value="genitore.Cognome" placeholder="Cognome" class="form-control" />
-                                </div>
-
-                                <div class="field small center">
-                                    <InputText @bind-Value="genitore.Nome" placeholder="Nome" class="form-control" />
-                                </div>
-
-                                <div class="field small center">
-                                    <InputText @bind-Value="genitore.Telefono" placeholder="Telefono" class="form-control" />
-                                </div>
-
-                                <div class="field small center">
-                                    <InputSelect @bind-Value="genitore.Genere" class="form-control">
-                                        <option value="">Seleziona</option>
-                                        <option value="1">M</option>
-                                        <option value="2">F</option>
-                                    </InputSelect>
-                                </div>
-
-                                <button type="button" class="icon-button @(IsReadOnly ? "hidden" : "")" @onclick="@(() => ApriPopup(genitore))" title="Cerca genitore">
-                                    <img src="images/icona_cerca.svg" class="cerca-img" />
-                                </button>
-
-                                <button type="button" class="btn-remove @(IsReadOnly ? "hidden" : "")" @onclick="@(() => RemoveGenitore(FormModel.Genitori.IndexOf(genitore)))">
-                                    Rimuovi
-                                </button>
-                            </div>
+                            <MudText Typo="Typo.body2" Class="mud-text-secondary mb-2">Nessun genitore inserito.</MudText>
+                        }
+                        <MudStack Spacing="2">
+                            @foreach (var g in FormModel.Genitori)
+                            {
+                                var genitore = g;
+                                var indice = FormModel.Genitori.IndexOf(genitore) + 1;
+                                <MudPaper Outlined="true" Class="pa-3" Style="background: var(--mud-palette-background-gray)">
+                                    <div class="d-flex align-center flex-wrap gap-1 mb-2">
+                                        <MudText Typo="Typo.subtitle2" Class="flex-grow-1">Genitore @indice</MudText>
+                                        @if (genitore.IdGenitore != null)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Icon="@Icons.Material.Outlined.Link">Già registrato</MudChip>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(genitore.Telefono))
+                                        {
+                                            <MudTooltip Text="Chiama">
+                                                <MudIconButton Icon="@Icons.Material.Filled.Call" Size="Size.Small" Color="Color.Success"
+                                                               Href="@($"tel:{genitore.Telefono.Replace(" ", "")}")" aria-label="Chiama" />
+                                            </MudTooltip>
+                                        }
+                                        @if (!SolaLettura)
+                                        {
+                                            <MudTooltip Text="Cerca tra i genitori già registrati">
+                                                <MudIconButton Icon="@Icons.Material.Filled.PersonSearch" Size="Size.Small" Color="Color.Primary"
+                                                               Disabled="Disabled" OnClick="() => ApriRicercaGenitore(genitore)" aria-label="Cerca genitore" />
+                                            </MudTooltip>
+                                            <MudTooltip Text="Rimuovi genitore">
+                                                <MudIconButton Icon="@Icons.Material.Outlined.Delete" Size="Size.Small" Color="Color.Error"
+                                                               Disabled="Disabled" OnClick="() => RimuoviGenitore(genitore)" aria-label="Rimuovi genitore" />
+                                            </MudTooltip>
+                                        }
+                                    </div>
+                                    <MudGrid Spacing="2">
+                                        <MudItem xs="12" sm="6" md="3">
+                                            <MudTextField T="string" @bind-Value="genitore.Cognome" Label="Cognome" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                          Required="true" RequiredError="Obbligatorio" />
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6" md="3">
+                                            <MudTextField T="string" @bind-Value="genitore.Nome" Label="Nome" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                          Required="true" RequiredError="Obbligatorio" />
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6" md="3">
+                                            <MudTextField T="string" @bind-Value="genitore.Telefono" Label="Telefono" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                          InputType="InputType.Telephone" />
+                                        </MudItem>
+                                        <MudItem xs="12" sm="6" md="3">
+                                            <MudRadioGroup T="int?" @bind-Value="genitore.Genere" Required="true" RequiredError="Indica il genere">
+                                                <MudRadio T="int?" Value="1" Color="Color.Primary" Dense="true">M</MudRadio>
+                                                <MudRadio T="int?" Value="2" Color="Color.Primary" Dense="true">F</MudRadio>
+                                            </MudRadioGroup>
+                                        </MudItem>
+                                    </MudGrid>
+                                </MudPaper>
+                            }
+                        </MudStack>
+                        @if (!SolaLettura && FormModel.Genitori.Count < MaxGenitori)
+                        {
+                            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.PersonAdd"
+                                       Class="mt-2" Disabled="Disabled" OnClick="AggiungiGenitore">Aggiungi genitore</MudButton>
                         }
                     }
-                </div>
+
+                    @if (meta.View_MailGenitore)
+                    {
+                        <MudTextField T="string" @bind-Value="FormModel.EmailGenitore" Label="Email genitore" Variant="Variant.Outlined"
+                                      Margin="Margin.Dense" InputType="InputType.Email" Class="mt-3"
+                                      Validation="@(new Func<string?, string?>(ValidaEmail))"
+                                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Email" />
+                    }
+                </MudPaper>
             }
 
-            @if (EventMetadata.View_MailGenitore)
+            @* ================= CLASSE E TAGLIA ================= *@
+            @if (meta.View_AnnoScolastico || meta.View_Taglia)
             {
-                <div class="row-flex mt">
-                    <div class="field medium">
-                        <label>Email genitore</label>
-                        <InputText @bind-Value="FormModel.EmailGenitore" class="form-control" />
-                    </div>
-                </div>
-            }
-
-            @if (EventMetadata.View_AnnoScolastico)
-            {
-                <!-- ================= ISCRIZIONE E NOTE ================= -->
-                <div class="row-flex mt">
-                    <div class="field medium">
-                        <label>Anno scolastico</label>
-                        <InputSelect @bind-Value="FormModel.AnnoScolastico" class="form-control">
-                            <option value="">Seleziona</option>
-                            @foreach (var anno in AnniScolastici)
-                            {
-                                <option value="@anno.Id">@anno.Desc</option>
-                            }
-                        </InputSelect>
-                    </div>
-                </div>
-            }
-
-            <div class="row-flex mt">
-                <div class="field large">
-                    <label>Note</label>
-                    <InputTextArea @bind-Value="FormModel.Note" rows="3" class="form-control" />
-                </div>
-            </div>
-
-            @if (EventMetadata.View_Priority)
-            {
-                <div class="row-flex mt align-center">
-                    <InputCheckbox @bind-Value="FormModel.Priority" />
-                    <span>Priorità</span>
-                </div>
-            }
-
-            @if (EventMetadata.View_Settimane)
-            {
-                <!-- ================= SETTIMANE ================= -->
-                @if (FormModel.Settimane != null)
-                {
-                    <div class="section mt">
-                        <label>Settimane</label>
-                        @foreach (var settimana in FormModel.Settimane)
+                <MudPaper Outlined="true" Class="pa-3 pa-sm-4">
+                    @(Intestazione(Icons.Material.Outlined.School, meta.View_AnnoScolastico && meta.View_Taglia ? "Classe e taglia" : meta.View_AnnoScolastico ? "Classe" : "Taglia"))
+                    <MudGrid Spacing="2">
+                        @if (meta.View_AnnoScolastico)
                         {
-                            <div class="row-flex align-center">
-                                <InputCheckbox @bind-Value="settimana.IsSelected" />
-                                <span>@settimana.Desc</span>
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="int?" @bind-Value="FormModel.AnnoScolastico" Label="Anno scolastico" Variant="Variant.Outlined"
+                                           Margin="Margin.Dense" Clearable="true" AnchorOrigin="Origin.BottomCenter"
+                                           ToStringFunc="@(id => _dati.AnniScolastici.FirstOrDefault(a => a.Id == id)?.Desc ?? (id?.ToString() ?? ""))">
+                                    @foreach (var anno in _dati.AnniScolastici)
+                                    {
+                                        <MudSelectItem T="int?" Value="@anno.Id">@anno.Desc</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        }
+                        @if (meta.View_Taglia)
+                        {
+                            <MudItem xs="12" sm="6">
+                                <MudSelect T="int?" @bind-Value="FormModel.Taglia" Label="Taglia maglietta" Variant="Variant.Outlined"
+                                           Margin="Margin.Dense" Clearable="true" AnchorOrigin="Origin.BottomCenter"
+                                           ToStringFunc="@(id => DescTaglia(id))">
+                                    @foreach (var taglia in _dati.Taglie)
+                                    {
+                                        <MudSelectItem T="int?" Value="@taglia.Id">@DescTaglia(taglia.Id)</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                </MudPaper>
+            }
+
+            @* ================= SETTIMANE ================= *@
+            @if (meta.View_Settimane)
+            {
+                var gruppi = SettimaneModulo.Raggruppa(FormModel.Settimane);
+                var scelte = FormModel.Settimane.Count(s => s.IsSelected);
+                <MudPaper Outlined="true" Class="pa-3 pa-sm-4">
+                    @(Intestazione(Icons.Material.Outlined.DateRange, "Settimane",
+                                  scelte == 0 ? "Nessuna scelta" : $"{scelte} {(scelte == 1 ? "scelta" : "scelte")} · {Euro(FormModel.TotaleSettimane)}"))
+                    @if (gruppi.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Nessuna settimana configurata per questo evento.</MudText>
+                    }
+                    <MudStack Spacing="1">
+                        @foreach (var gruppo in gruppi)
+                        {
+                            <div class="d-flex flex-wrap align-center gap-2 py-1">
+                                <div class="flex-grow-1" style="min-width: 160px">
+                                    <MudText Typo="Typo.body1">@gruppo.Desc</MudText>
+                                    <MudText Typo="Typo.caption" Class="mud-text-secondary">
+                                        @gruppo.DataInizio.ToString("dd/MM") – @gruppo.DataFine.ToString("dd/MM/yyyy")
+                                    </MudText>
+                                </div>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var v in gruppo.Varianti)
+                                    {
+                                        var variante = v;
+                                        var conPranzo = SettimaneModulo.IsConPranzo(variante);
+                                        <MudChip T="int" Value="variante.Id"
+                                                 Color="@(variante.IsSelected ? Color.Primary : Color.Default)"
+                                                 Variant="@(variante.IsSelected ? Variant.Filled : Variant.Outlined)"
+                                                 Icon="@(variante.IsSelected ? Icons.Material.Filled.Check : conPranzo ? Icons.Material.Outlined.Restaurant : Icons.Material.Outlined.NoMeals)"
+                                                 Disabled="@((SolaLettura || Disabled) && !variante.IsSelected)"
+                                                 Ripple="@(!SolaLettura)"
+                                                 OnClick="() => ToggleSettimana(variante)">
+                                            @(conPranzo ? "Con pranzo" : "Senza pranzo") · @Euro(conPranzo ? variante.CostoIntero : variante.CostoBase)
+                                        </MudChip>
+                                    }
+                                </div>
                             </div>
                         }
-                    </div>
-                }
+                    </MudStack>
+                    @if (scelte > 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary d-block mt-2">
+                            Totale indicativo delle settimane, senza sconti: <b>@Euro(FormModel.TotaleSettimane)</b>
+                        </MudText>
+                    }
+                </MudPaper>
             }
 
-            @if (EventMetadata.View_Taglia)
+            @* ================= SCHEDA SANITARIA ================= *@
+            @if (meta.View_SchedaSanitaria && PuoVedereSanitario)
             {
-                <!-- ================= TAGLIA ================= -->
-                @if (Taglie != null)
-                {
-                    <div class="row-flex mt">
-                        <div class="field medium">
-                            <label>Taglia</label>
-                            <InputSelect @bind-Value="FormModel.Taglia" class="form-control">
-                                <option value="">Seleziona</option>
-                                @foreach (var taglia in Taglie)
-                                {
-                                    <option value="@taglia.Id">@taglia.Descrizione</option>
-                                }
-                            </InputSelect>
+                <MudPaper Outlined="true" Class="pa-3 pa-sm-4">
+                    @(Intestazione(Icons.Material.Outlined.MedicalInformation, "Scheda sanitaria", "Dato riservato"))
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" md="6">
+                            <MudTextField T="string" @bind-Value="FormModel.AllergieIntolleranze" Label="Allergie / intolleranze"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                        </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudTextField T="string" @bind-Value="FormModel.PatologieTerapie" Label="Patologie / terapie"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" Lines="2" />
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            }
+
+            @* ================= CONSENSI ================= *@
+            @if (meta.View_Consensi)
+            {
+                <MudPaper Outlined="true" Class="pa-3 pa-sm-4">
+                    @(Intestazione(Icons.Material.Outlined.FactCheck, "Consensi",
+                                  $"{FormModel.ConsensiDisponibili.Count(c => c.IsSelected)} di {FormModel.ConsensiDisponibili.Count}"))
+                    @if (FormModel.ConsensiDisponibili.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary">Nessun consenso configurato per questo evento.</MudText>
+                    }
+                    @foreach (var c in FormModel.ConsensiDisponibili)
+                    {
+                        var consenso = c;
+                        <div>
+                            <MudCheckBox T="bool" @bind-Value="consenso.IsSelected" Color="Color.Primary" Label="@(consenso.Descrizione ?? $"Consenso {consenso.IdTipoConsenso}")" />
                         </div>
-                    </div>
-                }
+                    }
+                </MudPaper>
             }
 
-            @if (EventMetadata.View_SchedaSanitaria)
-            {
-                <!-- ================= SCHEDA SANITARIA ================= -->
-                <div class="row-flex mt">
-                    <div class="field large">
-                        <label>Allergie/Intolleranze</label>
-                        <InputTextArea @bind-Value="FormModel.AllergieIntolleranze" class="form-control" rows="2" />
-                    </div>
-                </div>
-
-                <div class="row-flex mt">
-                    <div class="field large">
-                        <label>Patologie/Terapie</label>
-                        <InputTextArea @bind-Value="FormModel.PatologieTerapie" class="form-control" rows="2" />
-                    </div>
-                </div>
-            }
-
-            @if (EventMetadata.View_Consensi)
-            {
-                <!-- ================= CONSENSI ================= -->
-                @if (FormModel.ConsensiDisponibili != null)
-                {
-                    <div class="section mt">
-                        <label>Consensi</label>
-                        @foreach (var consenso in FormModel.ConsensiDisponibili)
+            @* ================= PAGAMENTO ================= *@
+            <MudPaper Outlined="true" Class="pa-3 pa-sm-4">
+                @(Intestazione(Icons.Material.Outlined.Payments, "Pagamento", FormModel.Pagato ? "Pagato" : "Da pagare"))
+                <MudGrid Spacing="2">
+                    @if (meta.View_FormatoIscrPagamento)
+                    {
+                        <MudItem xs="12" sm="6">
+                            <MudSelect T="int?" @bind-Value="FormModel.FormatoIscrizioneSelezionato" Label="Formato iscrizione" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" Clearable="true" AnchorOrigin="Origin.BottomCenter"
+                                       ToStringFunc="DescFormato">
+                                @foreach (var f in Enum.GetValues<FormatoIscrizioneValues>())
+                                {
+                                    <MudSelectItem T="int?" Value="@((int)f)">@DescFormato((int)f)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudSelect T="int?" @bind-Value="FormModel.ModalitaPagamentoSelezionata" Label="Modalità pagamento" Variant="Variant.Outlined"
+                                       Margin="Margin.Dense" Clearable="true" AnchorOrigin="Origin.BottomCenter"
+                                       ToStringFunc="DescModalita">
+                                @foreach (var m in Enum.GetValues<ModalitaPagamentoValues>())
+                                {
+                                    <MudSelectItem T="int?" Value="@((int)m)">@DescModalita((int)m)</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                    }
+                    <MudItem xs="12" sm="6">
+                        <MudSwitch T="bool" @bind-Value="FormModel.Pagato" Color="Color.Success" Label="Pagato" />
+                        @if (meta.View_Caparra)
                         {
-                            <div class="row-flex align-center">
-                                <InputCheckbox @bind-Value="consenso.IsSelected" />
-                                <span>@consenso.Descrizione</span>
-                            </div>
+                            <MudSwitch T="bool" @bind-Value="FormModel.CaparraPagata" Color="Color.Success" Label="Caparra pagata" />
                         }
+                        @if (meta.View_ScontoFratelli)
+                        {
+                            <MudCheckBox T="bool" @bind-Value="FormModel.ScontoFratelli" Color="Color.Primary" Label="Sconto fratelli" />
+                        }
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudCheckBox T="bool" @bind-Value="FormModel.Ricevuta" Color="Color.Primary" Label="Richiede ricevuta" />
+                        @if (FormModel.Ricevuta)
+                        {
+                            <MudTextField T="string" @bind-Value="FormModel.DescRicevuta" Label="Intestatario ricevuta"
+                                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        }
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            @* ================= ALTRO ================= *@
+            <MudPaper Outlined="true" Class="pa-3 pa-sm-4">
+                @(Intestazione(Icons.Material.Outlined.Notes, "Altro"))
+                @if (meta.View_IscrizioneNoi)
+                {
+                    <div>
+                        <MudCheckBox T="bool" @bind-Value="FormModel.DaIscrivereAlNoi" Color="Color.Primary" Label="Da iscrivere al NOI" />
                     </div>
-                }
-            }
-
-            @if (EventMetadata.View_FormatoIscrPagamento)
-            {
-                <!-- ================= PAGAMENTO E FLAGS ================= -->
-                <div class="row-flex mt wrap">
-                    <div class="field medium">
-                        <label>Formato iscrizione</label>
-                        <InputSelect @bind-Value="FormModel.FormatoIscrizioneSelezionato">
-                            <option value="">Seleziona</option>
-                            @foreach (var formato in FormatoIscrizioneItems)
-                            {
-                                <option value="@formato.Id">@formato.Desc</option>
-                            }
-                        </InputSelect>
-                    </div>
-
-                    <div class="field medium">
-                        <label>Modalità pagamento</label>
-                        <InputSelect @bind-Value="FormModel.ModalitaPagamentoSelezionata">
-                            <option value="">Seleziona</option>
-                            @foreach (var modalita in ModalitaPagamentoItems)
-                            {
-                                <option value="@modalita.Id">@modalita.Desc</option>
-                            }
-                        </InputSelect>
-                    </div>
-                </div>
-            }
-
-            @if (EventMetadata.View_UscitaAutonoma)
-            {
-                <div class="row-flex mt align-center">
-                    <InputCheckbox @bind-Value="FormModel.EsceSolo" />
-                    <span>Uscita autonoma</span>
-                </div>
-            }
-
-            @if (EventMetadata.View_Caparra)
-            {
-                <div class="row-flex mt align-center">
-                    <InputCheckbox @bind-Value="FormModel.CaparraPagata" />
-                    <span>Caparra pagata</span>
-                </div>
-            }
-
-            @if (EventMetadata.View_IscrizioneNoi)
-            {
-                <div class="row-flex mt align-center">
-                    <InputCheckbox @bind-Value="FormModel.DaIscrivereAlNoi" />
-                    <span>Da iscrivere al NOI</span>
-
                     @if (!FormModel.DaIscrivereAlNoi)
                     {
-                        <InputCheckbox @bind-Value="FormModel.AltraParrocchia" />
-                        <span>Iscrizione al NOI in un'altra parrocchia?</span>
-                    }
-
-                </div>
-            }
-
-            @if (EventMetadata.View_ScontoFratelli)
-            {
-                <div class="row-flex mt align-center">
-                    <InputCheckbox @bind-Value="FormModel.ScontoFratelli" />
-                    <span>Sconto fratelli</span>
-                </div>
-            }
-
-            <div class="row-flex mt align-center">
-                <InputCheckbox @bind-Value="FormModel.Ricevuta" />
-                <span>Richiede ricevuta</span>
-
-            </div>
-            @if (FormModel.Ricevuta)
-            {
-                <div class="row-flex mt align-center">
-
-
-                    <div class="field medium">
-                        <label>Intestatario ricevuta</label>
-                        <InputText @bind-Value="FormModel.DescRicevuta" class="form-control" />
-                    </div>
-                </div>
-            }
-        </fieldset>
-
-        <!-- ================= SUBMIT ================= -->
-        <button type="submit"
-        class="btn-submit mobile-fab @((IsReadOnly && !IsSubmitting) ? "hidden" : "")"
-        disabled="@IsSubmitting">
-            @if (IsSubmitting)
-            {
-                <span class="btn-text visually-hidden">Salva iscrizione</span>
-                <span class="save-loader"></span>
-            }
-            else
-            {
-                <span class="btn-text">Salva iscrizione</span>
-                <img src="images/save.svg" class="btn-icon" />
-            }
-        </button>
-    </div>
-</EditForm>
-@if (IsPopupAperto)
-{
-    <div class="popup-overlay">
-        <div class="popup">
-
-            <button @onclick="ChiudiPopup" class="popup-close">×</button>
-
-            <h3>Seleziona un genitore</h3>
-
-            @if (IsLoadingGenitori)
-            {
-                <div class="popup-loader">
-                    <div class="loader"></div>
-                </div>
-            }
-            else
-            {
-                <InputText Value="@_filtroGenitore"
-                ValueExpression="() => _filtroGenitore"
-                placeholder="Cerca per nome o cognome"
-                class="popup-search"
-                @oninput="OnFiltroGenitoreInput" />
-
-                <div style="height:350px; overflow:auto;">
-                    @foreach (var g in GenitoriFiltrati)
-                    {
-                        <div @onclick="() => SelezionaGenitore(g)" class="rigaGenitorePopup">
-                            <strong>@g.Cognome</strong> @g.Nome
+                        <div class="ml-6">
+                            <MudCheckBox T="bool" @bind-Value="FormModel.AltraParrocchia" Color="Color.Primary" Label="Iscritto al NOI in un'altra parrocchia" />
                         </div>
                     }
+                }
+                @if (meta.View_UscitaAutonoma)
+                {
+                    <div>
+                        <MudCheckBox T="bool" @bind-Value="FormModel.EsceSolo" Color="Color.Primary" Label="Uscita autonoma" />
+                    </div>
+                }
+                @if (meta.View_Priority)
+                {
+                    <div>
+                        <MudCheckBox T="bool" @bind-Value="FormModel.Priority" Color="Color.Warning" Label="Priorità"
+                                     CheckedIcon="@Icons.Material.Filled.Star" UncheckedIcon="@Icons.Material.Outlined.StarBorder" />
+                    </div>
+                }
+                <MudTextField T="string" @bind-Value="FormModel.Note" Label="Note" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Lines="3" Class="mt-2" />
+            </MudPaper>
+
+            @if (_errori.Count > 0)
+            {
+                <MudAlert Severity="Severity.Error" ShowCloseIcon="true" CloseIconClicked="() => _errori.Clear()">
+                    <MudText Typo="Typo.subtitle2">Controlla questi campi:</MudText>
+                    <ul class="ml-4" style="list-style: disc">
+                        @foreach (var errore in _errori)
+                        {
+                            <li>@errore</li>
+                        }
+                    </ul>
+                </MudAlert>
+            }
+        </MudStack>
+    </MudForm>
+
+    <MudDialog @bind-Visible="_ricercaAperta" Options="_opzioniRicerca">
+        <TitleContent>
+            <MudText Typo="Typo.h6">Seleziona un genitore</MudText>
+        </TitleContent>
+        <DialogContent>
+            <MudTextField T="string" @bind-Value="_filtroGenitore" Placeholder="Cerca per nome o cognome" Variant="Variant.Outlined"
+                          Margin="Margin.Dense" Immediate="true" Clearable="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+            @if (_caricamentoGenitori)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-3" />
+            }
+            else if (_erroreGenitori != null)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@_erroreGenitori</MudAlert>
+            }
+            else
+            {
+                var trovati = GenitoriFiltrati.ToList();
+                <div style="max-height: 50vh; overflow-y: auto" class="mt-2">
+                    <MudList T="GenitoreDto" Dense="true">
+                        @foreach (var g in trovati.Take(MaxRisultatiRicerca))
+                        {
+                            var trovato = g;
+                            <MudListItem T="GenitoreDto" Value="trovato" Icon="@Icons.Material.Outlined.Person"
+                                         Text="@trovato.NomeCompleto" SecondaryText="@trovato.Telefono"
+                                         OnClick="() => SelezionaGenitore(trovato)" />
+                        }
+                    </MudList>
+                    @if (trovati.Count == 0)
+                    {
+                        <MudText Typo="Typo.body2" Class="mud-text-secondary pa-2">Nessun genitore trovato.</MudText>
+                    }
+                    else if (trovati.Count > MaxRisultatiRicerca)
+                    {
+                        <MudText Typo="Typo.caption" Class="mud-text-secondary pa-2">
+                            Mostrati @MaxRisultatiRicerca di @trovati.Count: affina la ricerca.
+                        </MudText>
+                    }
                 </div>
             }
-        </div>
-    </div>
+        </DialogContent>
+        <DialogActions>
+            <MudButton OnClick="ChiudiRicerca">Annulla</MudButton>
+        </DialogActions>
+    </MudDialog>
 }
-@if (deletedPopup)
-{
-    <div class="succeded-popup-overlay">
-        <div class="succeded-popup-content">
-            <h3>Eliminazione completata</h3>
-            <p>L'iscrizione di @FormModel.Cognome @FormModel.Nome è stata eliminata</p>
-            <div class="popup-buttons">
-                <button class="btn-no" @onclick="ChiudiMainPopup">Ok</button>
-            </div>
-        </div>
-    </div>
-}
-@if (showErrorPopup)
-{
-    <div class="error-popup-overlay">
-        <div class="error-popup-content">
-            <button class="error-popup-close" @onclick="CloseErrorPopup">×</button>
-            <h3>Errore durante il salvataggio</h3>
-            <p style="white-space: pre-wrap;">@errorMessage</p>
-        </div>
-    </div>
-}
-
 
 @code {
-    private LoadingView? LoadingOverlay;
-    private bool IsLoading = true;
-    [Parameter]
-    public bool IsSubmitting { get; set; } = false;
-    [Parameter]
-    public ModuloIscrizioneDto FormModel { get; set; } = new();
+    private const int MaxGenitori = 2;
+    private const int MaxRisultatiRicerca = 50;
+    private static readonly CultureInfo Italiano = CultureInfo.GetCultureInfo("it-IT");
 
-    [Parameter]
-    public EventCallback<ModuloIscrizioneDto> OnSubmitCallback { get; set; }
+    [Parameter, EditorRequired] public ModuloIscrizioneDto FormModel { get; set; } = new();
 
-    [Parameter]
-    public EventCallback ChiudiMainPopup { get; set; }
+    /// <summary>Sola lettura richiesta dalla pagina (es. dettaglio prima di "Modifica").</summary>
+    [Parameter] public bool ReadOnly { get; set; }
 
-    [Inject]
-    public ModuloIscrizioneViewModel ViewModel { get; set; } = new();
+    /// <summary>Disabilita i campi durante il salvataggio.</summary>
+    [Parameter] public bool Disabled { get; set; }
 
-    [Parameter]
-    public bool IsReadOnly { get; set; } = false;
-    private List<Settimana>? Settimane = new List<Settimana>();
-    private List<Taglia>? Taglie = new List<Taglia>();
-    private List<ConsensoDto>? ConsensiDisponibili = new List<ConsensoDto>();
+    private MudForm? _form;
+    private DatiModulo? _dati;
+    private bool _caricamento = true;
+    private string? _erroreCaricamento;
+    private ModuloIscrizioneDto? _modelloPreparato;
+    private List<string> _errori = new();
 
-    private List<AnnoScolastico> AnniScolastici { get; set; }
+    /// <summary>Senza il permesso di modifica il modulo è sempre in sola lettura.</summary>
+    private bool SolaLettura => ReadOnly || !AppState.Can(Permessi.IscrittiEdit);
 
-    private List<ModalitaPagamentoItem> ModalitaPagamentoItems = Enum.GetValues(typeof(ModalitaPagamentoValues))
-      .Cast<ModalitaPagamentoValues>()
-      .Select(e => new ModalitaPagamentoItem() { Id = (int)e, Desc = e.ToString() }).ToList();
+    private bool PuoVedereSanitario => AppState.CanAny(Permessi.IscrittiSanitario, Permessi.IscrittiEdit);
 
-    private List<FormatoIscrizioneItem> FormatoIscrizioneItems = Enum.GetValues(typeof(FormatoIscrizioneValues))
-        .Cast<FormatoIscrizioneValues>()
-        .Select(e => new FormatoIscrizioneItem() { Id = (int)e, Desc = e.ToString() }).ToList();
-    private bool datiCaricati = false;
+    /// <summary>True quando i dati di riferimento sono caricati e il modulo è utilizzabile.</summary>
+    public bool Pronto => !_caricamento && _erroreCaricamento == null && _dati != null;
 
-    private EventoMetadata EventMetadata { get; set; }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    protected override async Task OnInitializedAsync()
     {
-        if (!Settimane.Any())
-            Settimane = await ViewModel.GetSettimaneAsync();
-
-        if (!Taglie.Any())
-            Taglie = await ViewModel.GetTaglieAsync();
-        if (firstRender || !datiCaricati)
-            EventMetadata = await IscrizioneCompletaController.GetEventMetadataAsync();
-
-        if (AnniScolastici == null || !AnniScolastici.Any())
-            AnniScolastici = await IscrizioneCompletaController.GetAnniScolasticiAsync(JsonConvert.DeserializeObject<int[]>(EventMetadata.GradiScuolaAllowed));
-        if (!firstRender || datiCaricati)
-        {
-            return;
-        }
-
-        IsLoading = true;
-        StateHasChanged();
-
-        LoadingOverlay?.Start();
-
-        ConsensiDisponibili = await ViewModel.GetConsensiAsync();
-
-        // Se i dati del FormModel arrivano da fuori (iscrizioneDaModificare), non sovrascriverli
-        if (FormModel.Settimane == null || !FormModel.Settimane.Any())
-        {
-            FormModel.Settimane = Settimane.Select(s => new Settimana
-                {
-                    Id = s.Id,
-                    Desc = s.Desc,
-                    CostoBase = s.CostoBase,
-                    CostoIntero = s.CostoIntero,
-                    DataInizio = s.DataInizio,
-                    DataFine = s.DataFine,
-                    IsSelected = false
-                }).ToList();
-        }
-
-        if (FormModel.ConsensiDisponibili == null || !FormModel.ConsensiDisponibili?.Any() == true)
-            FormModel.ConsensiDisponibili = ConsensiDisponibili;
-
-        IsReadOnly = FormModel.IdIscrizione != null;
-        datiCaricati = true;
-        LoadingOverlay?.Stop();
-        IsLoading = false;
-
-        StateHasChanged();
+        await CaricaAsync();
     }
 
-    private void AddGenitore()
+    protected override void OnParametersSet()
     {
-        FormModel.Genitori.Add(new GenitoreDto());
+        if (Pronto && !ReferenceEquals(_modelloPreparato, FormModel))
+            PreparaModello();
     }
 
-    private void RemoveGenitore(int index)
+    private async Task CaricaAsync()
     {
-        FormModel.Genitori.RemoveAt(index);
-    }
-
-    private async Task HandleSubmit()
-    {
-        if (OnSubmitCallback.HasDelegate)
-        {
-            await OnSubmitCallback.InvokeAsync(FormModel);
-        }
-    }
-
-    private bool IsPopupAperto = false;
-    private bool IsLoadingGenitori = false;
-    private List<GenitoreDto> Genitori = new(); // Lista completa dei genitori
-    private string _filtroGenitore = string.Empty;
-
-    private void OnFiltroGenitoreInput(ChangeEventArgs e)
-    {
-        _filtroGenitore = e.Value?.ToString() ?? string.Empty;
-    }
-
-    private List<GenitoreDto> GenitoriFiltrati =>
-        string.IsNullOrWhiteSpace(_filtroGenitore)
-            ? Genitori
-            : Genitori.Where(g => g.Nome.Contains(_filtroGenitore, StringComparison.OrdinalIgnoreCase)
-                                || g.Cognome.Contains(_filtroGenitore, StringComparison.OrdinalIgnoreCase)).ToList();
-
-    private GenitoreDto? genitoreCorrente;
-
-    private async void ApriPopup(GenitoreDto genitore)
-    {
-        genitoreCorrente = genitore;
-        IsPopupAperto = true;
-        IsLoadingGenitori = true;
-
-        // Chiamata asincrona per caricare i genitori
-        Genitori = await ViewModel.GetGenitoriListAsync();
-
-        IsLoadingGenitori = false;
-        StateHasChanged();
-    }
-
-    private void ChiudiPopup()
-    {
-        IsPopupAperto = false;
-        _filtroGenitore = "";
-        Genitori.Clear();
-    }
-
-    private void SelezionaGenitore(GenitoreDto genitore)
-    {
-        if (genitoreCorrente != null)
-        {
-            genitoreCorrente.IdGenitore = genitore.IdGenitore;
-            genitoreCorrente.Nome = genitore.Nome;
-            genitoreCorrente.Cognome = genitore.Cognome;
-            genitoreCorrente.Telefono = genitore.Telefono;
-            genitoreCorrente.Existing = true;
-            genitoreCorrente.Genere = genitore.Genere;
-        }
-        IsPopupAperto = false;
-        _filtroGenitore = "";
-        Genitori.Clear();
-    }
-
-    private void Modifica()
-    {
-        IsReadOnly = false;
-    }
-
-    private async Task AnnulaModifica()
-    {
-        await ChiudiMainPopup.InvokeAsync();
-    }
-
-    private bool deletedPopup = false;
-    private bool showErrorPopup = false;
-    private string errorMessage = string.Empty;
-
-    private async Task Elimina()
-    {
-        IsSubmitting = true; // disabilita il form
-        IsReadOnly = true;
-
-        bool succeded = false;
+        _caricamento = true;
+        _erroreCaricamento = null;
         try
         {
-            succeded = await IscrizioneCompletaController.DeleteAsync(FormModel.IdBambino.Value);
-
-            if (succeded)
-            {
-                deletedPopup = true; // mostra popup di successo
-            }
+            _dati = await ViewModel.CaricaDatiAsync();
+            PreparaModello();
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message; // salva il messaggio da mostrare
-            showErrorPopup = true;      // mostra popup
-            Console.WriteLine($"Errore durante il salvataggio: {ex.Message}");
+            _erroreCaricamento = ex.Message;
         }
-
-        IsSubmitting = false;
-        IsReadOnly = false;
+        finally
+        {
+            _caricamento = false;
+        }
     }
 
-    private void CloseErrorPopup()
+    /// <summary>Un modulo nuovo riceve tutte le settimane e i consensi dell'evento (non selezionati).</summary>
+    private void PreparaModello()
     {
-        showErrorPopup = false;
-        errorMessage = string.Empty;
+        if (_dati == null)
+            return;
+
+        FormModel.Genitori ??= new();
+
+        if (FormModel.Settimane == null || FormModel.Settimane.Count == 0)
+        {
+            FormModel.Settimane = _dati.Settimane.Select(s => new Settimana
+            {
+                Id = s.Id,
+                event_id = s.event_id,
+                Desc = s.Desc,
+                DescBase = s.DescBase,
+                CostoBase = s.CostoBase,
+                CostoIntero = s.CostoIntero,
+                DataInizio = s.DataInizio,
+                DataFine = s.DataFine,
+                IsSelected = false
+            }).ToList();
+        }
+
+        if (FormModel.ConsensiDisponibili == null || FormModel.ConsensiDisponibili.Count == 0)
+        {
+            FormModel.ConsensiDisponibili = _dati.Consensi
+                .Select(c => new ConsensoDto { IdTipoConsenso = c.IdTipoConsenso, Descrizione = c.Descrizione })
+                .ToList();
+        }
+
+        _modelloPreparato = FormModel;
+        _errori.Clear();
+    }
+
+    /// <summary>
+    /// Evidenzia i campi non validi e applica ModuloIscrizioneValidator, che resta
+    /// il riferimento. Restituisce true se si può salvare.
+    /// </summary>
+    public async Task<bool> ValidaAsync()
+    {
+        if (!Pronto)
+        {
+            _errori = new() { "Il modulo non è ancora pronto." };
+            StateHasChanged();
+            return false;
+        }
+
+        if (_form != null)
+            await _form.ValidateAsync();
+
+        _errori = ModuloIscrizioneValidator.Validate(FormModel)
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+        StateHasChanged();
+        return _errori.Count == 0;
+    }
+
+    private RenderFragment Intestazione(string icona, string titolo, string? info = null) =>
+        @<div class="d-flex align-center gap-2 mb-3">
+            <MudIcon Icon="@icona" Color="Color.Primary" Size="Size.Small" />
+            <MudText Typo="Typo.subtitle1" Class="flex-grow-1"><b>@titolo</b></MudText>
+            @if (!string.IsNullOrEmpty(info))
+            {
+                <MudText Typo="Typo.caption" Class="mud-text-secondary">@info</MudText>
+            }
+        </div>;
+
+    private string? EtaDesc
+    {
+        get
+        {
+            if (FormModel.DataNascita is not DateTime nascita || nascita > DateTime.Today)
+                return null;
+            var oggi = DateTime.Today;
+            var eta = oggi.Year - nascita.Year - (oggi.DayOfYear < nascita.DayOfYear ? 1 : 0);
+            return eta == 1 ? "1 anno" : $"{eta} anni";
+        }
+    }
+
+    private static string Euro(decimal? valore) => valore?.ToString("C", Italiano) ?? "–";
+
+    private string DescTaglia(int? id)
+    {
+        var taglia = _dati?.Taglie.FirstOrDefault(t => t.Id == id);
+        if (taglia == null)
+            return id?.ToString() ?? "";
+        return string.IsNullOrWhiteSpace(taglia.Descrizione) ? taglia.Codice : taglia.Descrizione;
+    }
+
+    private static string DescFormato(int? valore) => DescEnum<FormatoIscrizioneValues>(valore);
+
+    private static string DescModalita(int? valore) => DescEnum<ModalitaPagamentoValues>(valore);
+
+    private static string DescEnum<TEnum>(int? valore) where TEnum : struct, Enum
+    {
+        if (valore == null || !Enum.IsDefined(typeof(TEnum), valore.Value))
+            return valore?.ToString() ?? "";
+        var nome = Enum.GetName(typeof(TEnum), valore.Value) ?? "";
+        return nome == nameof(ModalitaPagamentoValues.Pos) ? "POS" : nome;
+    }
+
+    private static string? ValidaEmail(string? email) =>
+        ModuloIscrizioneValidator.IsEmailValida(email) ? null : "Indirizzo email non valido";
+
+    private void ToggleSettimana(Settimana variante)
+    {
+        if (SolaLettura || Disabled)
+            return;
+        SettimaneModulo.Seleziona(FormModel.Settimane, variante, !variante.IsSelected);
+    }
+
+    private void AggiungiGenitore()
+    {
+        if (FormModel.Genitori.Count < MaxGenitori)
+            FormModel.Genitori.Add(new GenitoreDto());
+    }
+
+    private void RimuoviGenitore(GenitoreDto genitore)
+    {
+        FormModel.Genitori.Remove(genitore);
+    }
+
+    // ---------- Ricerca genitori già registrati (solo evento corrente) ----------
+
+    private readonly DialogOptions _opzioniRicerca = new() { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+    private bool _ricercaAperta;
+    private bool _caricamentoGenitori;
+    private string? _erroreGenitori;
+    private List<GenitoreDto> _genitoriRegistrati = new();
+    private string? _filtroGenitore;
+    private GenitoreDto? _genitoreCorrente;
+
+    private IEnumerable<GenitoreDto> GenitoriFiltrati
+    {
+        get
+        {
+            var parole = (_filtroGenitore ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            return _genitoriRegistrati.Where(g => parole.All(p =>
+                (g.Nome ?? "").Contains(p, StringComparison.CurrentCultureIgnoreCase) ||
+                (g.Cognome ?? "").Contains(p, StringComparison.CurrentCultureIgnoreCase) ||
+                (g.Telefono ?? "").Contains(p, StringComparison.OrdinalIgnoreCase)));
+        }
+    }
+
+    private async Task ApriRicercaGenitore(GenitoreDto genitore)
+    {
+        _genitoreCorrente = genitore;
+        _filtroGenitore = null;
+        _erroreGenitori = null;
+        _ricercaAperta = true;
+        _caricamentoGenitori = true;
+        StateHasChanged();
+        try
+        {
+            _genitoriRegistrati = await ViewModel.GetGenitoriListAsync();
+        }
+        catch (Exception ex)
+        {
+            _erroreGenitori = "Impossibile caricare i genitori: " + ex.Message;
+        }
+        finally
+        {
+            _caricamentoGenitori = false;
+        }
+    }
+
+    private void SelezionaGenitore(GenitoreDto trovato)
+    {
+        if (_genitoreCorrente != null)
+        {
+            _genitoreCorrente.IdGenitore = trovato.IdGenitore;
+            _genitoreCorrente.Nome = trovato.Nome;
+            _genitoreCorrente.Cognome = trovato.Cognome;
+            _genitoreCorrente.Telefono = trovato.Telefono;
+            _genitoreCorrente.Genere = trovato.Genere;
+            _genitoreCorrente.Existing = true;
+        }
+        ChiudiRicerca();
+    }
+
+    private void ChiudiRicerca()
+    {
+        _ricercaAperta = false;
+        _genitoreCorrente = null;
+        _genitoriRegistrati = new();
     }
 }

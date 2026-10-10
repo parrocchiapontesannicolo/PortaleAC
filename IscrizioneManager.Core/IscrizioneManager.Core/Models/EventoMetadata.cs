@@ -32,7 +32,7 @@ namespace IscrizioneManager.Core.Models
     public bool View_UscitaAutonoma { get; set; }
 
     [Column("gradi_scuola_allowed")]
-    public string GradiScuolaAllowed { get; set; }
+    public string? GradiScuolaAllowed { get; set; }
     [Column("view_caparra")]
     public bool View_Caparra { get; set; }
     [Column("view_priority")]

@@ -17,7 +17,7 @@ public class Bambino : EventModel
   public string Cognome { get; set; } = string.Empty;
 
   [Supabase.Postgrest.Attributes.Column("data_nascita")]
-  public string DataNascita { get; set; }
+  public string DataNascita { get; set; } = string.Empty;
   [Supabase.Postgrest.Attributes.Column("genere")]
   public int? Genere { get; set; }
 

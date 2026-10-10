@@ -1,404 +1,454 @@
-﻿@page "/iscritti"
+@page "/iscritti"
 @using IscrizioneManager.Core.Dtos
 @using IscrizioneManager.Core.Models
-@using IscrizioneManager.Core.Utils
 @using IscrizioniManager.Controllers
-@using IscrizioniManager.Models
-@using Newtonsoft.Json
-<link href="css/IscrittiLista.css" rel="stylesheet" />
+@inject AppState AppState
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
 
-<LoadingView @ref="LoadingOverlay" />
-<div class="header-iscrizione">
-    <h2>Iscritti (@Iscritti.Count)</h2>
-    <button class="btn-chiudi" @onclick="TornaIndietro" title="Chiudi">×</button>
-</div>
-<div class="iscritti-container @(IsLoading ? "loading" : null)">
-    <div class="table-wrapper">
-        <table class="iscritti-table">
-            <thead>
-                <tr class="header-row">
-                    <th @onclick="OrdinaCognome">@HeaderCognome</th>
-                    <th @onclick="OrdinaNome">@HeaderNome</th>
-                    <th @onclick="OrdinaDataNascita">@HeaderDataNascita</th>
-                    <th @onclick="OrdinaAnno">@HeaderAnno</th>
-                    <th @onclick="OrdinaPagato">@HeaderPagato</th>
-                </tr>
-                <tr class="filter-row">
-                    <th>
-                        <InputText Value="@_filtroCognome"
-                                   ValueExpression="() => _filtroCognome"
-                                   placeholder="Filtra Cognome"
-                                   class="form-control"
-                                   @oninput="OnFiltroCognomeInput" />
-                    </th>
-                    <th>
-                        <InputText Value="@_filtroNome"
-                                   ValueExpression="() => _filtroNome"
-                                   placeholder="Filtra Nome"
-                                   class="form-control"
-                                   @oninput="OnFiltroNomeInput" />
-                    </th>
-                    <th>
-                        <InputText Value="@_filtroDataNascita"
-                                   ValueExpression="() => _filtroDataNascita"
-                                   placeholder="Filtra Data nascita"
-                                   class="form-control"
-                                   @oninput="OnFiltroDataNascitaInput" />
-                    </th>
-                    <th>
-                        <InputSelect Value="_filtroAnnoValue" 
-                                     ValueExpression="() => _filtroAnnoValue" 
-                                     class="form-control" 
-                                     @oninput="OnFiltroAnnoChanged">
-                            @foreach (var anno in AnniScolastici)
-                            {
-                                <option value="@anno.Id">@anno.Desc</option>
-                            }
-                        </InputSelect>
-                    </th>
-                    <th>
-                        <InputSelect Value="_filtroPagatoValue" 
-                                     ValueExpression="() => _filtroPagatoValue"
-                                     class="form-control" 
-                                     @oninput="OnFiltroPagatoChanged">
-                            @foreach (var p in FiltriPagati)
-                            {
-                                <option value="@p.Value">@p.Desc</option>
-                            }
-                        </InputSelect>
-                    </th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (!IsLoading)
-                {
-                    @foreach (var item in Iscritti)
+<PageTitle>Iscritti - Portale AC</PageTitle>
+
+<PaginaProtetta Permessi="@(new[] { Permessi.IscrittiView, Permessi.IscrittiEdit, Permessi.IscrittiPagamenti })">
+    <div class="d-flex align-center flex-wrap gap-2 mb-3">
+        <MudText Typo="Typo.h5" Class="flex-grow-1">Iscritti</MudText>
+        <MudTooltip Text="Aggiorna">
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" Disabled="_caricamento" OnClick="CaricaAsync" aria-label="Aggiorna" />
+        </MudTooltip>
+        @if (AppState.Can(Permessi.IscrittiEdit))
+        {
+            <MudButton Href="@Rotte.NuovaIscrizione" Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.PersonAdd">Nuova iscrizione</MudButton>
+        }
+    </div>
+
+    @if (_caricamento)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" />
+        <MudStack Spacing="2">
+            @for (var i = 0; i < 6; i++)
+            {
+                <MudSkeleton SkeletonType="SkeletonType.Rectangle" Height="56px" />
+            }
+        </MudStack>
+    }
+    else if (_errore != null)
+    {
+        <MudAlert Severity="Severity.Error">
+            Impossibile caricare gli iscritti: @_errore
+            <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small" Class="ml-2" OnClick="CaricaAsync">Riprova</MudButton>
+        </MudAlert>
+    }
+    else
+    {
+        @* ---------- Riepilogo (i chip sono anche filtri rapidi) ---------- *@
+        <div class="d-flex flex-wrap gap-1 mb-3">
+            <MudChip T="string" Icon="@Icons.Material.Outlined.People" Color="Color.Primary"
+                     Variant="@(_filtro.FiltriAttivi == 0 ? Variant.Filled : Variant.Outlined)" OnClick="AzzeraFiltri">
+                Totale @_riepilogo.Totale
+            </MudChip>
+            <MudChip T="string" Icon="@Icons.Material.Outlined.CheckCircle" Color="Color.Success"
+                     Variant="@(_filtro.Pagato == true ? Variant.Filled : Variant.Outlined)" OnClick="() => FiltroRapidoPagato(true)">
+                Pagati @_riepilogo.Pagati
+            </MudChip>
+            <MudChip T="string" Icon="@Icons.Material.Outlined.PendingActions" Color="Color.Warning"
+                     Variant="@(_filtro.Pagato == false ? Variant.Filled : Variant.Outlined)" OnClick="() => FiltroRapidoPagato(false)">
+                Da pagare @_riepilogo.DaPagare
+            </MudChip>
+            @if (_metadata.View_Caparra)
+            {
+                <MudChip T="string" Icon="@Icons.Material.Outlined.Savings" Color="Color.Info"
+                         Variant="@(_filtro.Caparra == true ? Variant.Filled : Variant.Outlined)" OnClick="FiltroRapidoCaparra">
+                    Caparra @_riepilogo.CaparraPagata
+                </MudChip>
+            }
+            @if (_metadata.View_Priority)
+            {
+                <MudChip T="string" Icon="@Icons.Material.Outlined.Star" Color="Color.Secondary"
+                         Variant="@(_filtro.Priority == true ? Variant.Filled : Variant.Outlined)" OnClick="FiltroRapidoPriority">
+                    Priorità @_riepilogo.Priority
+                </MudChip>
+            }
+            @foreach (var c in _riepilogo.PerAnno)
+            {
+                var conteggio = c;
+                var valore = conteggio.Anno ?? FiltroIscritti.AnnoNonIndicato;
+                <MudChip T="string" Color="Color.Default"
+                         Variant="@(_filtro.Anno == valore ? Variant.Filled : Variant.Outlined)" OnClick="() => FiltroRapidoAnno(valore)">
+                    @conteggio.Desc @conteggio.Conteggio
+                </MudChip>
+            }
+        </div>
+
+        @* ---------- Filtri ---------- *@
+        <MudGrid Spacing="2" Class="mb-1">
+            <MudItem xs="12" md="4">
+                <MudTextField T="string" @bind-Value="_filtro.Testo" @bind-Value:after="Applica" DebounceInterval="250"
+                              Placeholder="Cerca nome, cognome, classe, note…" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Clearable="true" Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search" />
+            </MudItem>
+            <MudItem xs="6" sm="4" md="2">
+                <MudSelect T="int?" @bind-Value="_filtro.Anno" @bind-Value:after="Applica" Label="Classe" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Clearable="true" AnchorOrigin="Origin.BottomCenter" ToStringFunc="DescAnno">
+                    @foreach (var anno in _anniScolastici)
                     {
-                        <tr @onclick="@(() => OnIscrittoSelected(item))" class="data-row">
-                            <td>@item.BCognome</td>
-                            <td>@item.BNome</td>
-                            <td>@item.DataNascitaDesc</td>
-                            <td>@item.AnnoDesc</td>
-                            <td>
-                                <InputCheckbox @bind-Value="item.Pagato" @oninput="@((ChangeEventArgs e) => OnPagatoChanged(item, e))" @onclick:stopPropagation />
-                            </td>
-                        </tr>
+                        <MudSelectItem T="int?" Value="@anno.Id">@anno.Desc</MudSelectItem>
                     }
+                    @if (_riepilogo.PerAnno.Any(c => c.Anno == null))
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)FiltroIscritti.AnnoNonIndicato)">Non indicato</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="6" sm="4" md="2">
+                <MudSelect T="bool?" @bind-Value="_filtro.Pagato" @bind-Value:after="Applica" Label="Pagamento" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Clearable="true" AnchorOrigin="Origin.BottomCenter"
+                           ToStringFunc="@(v => v == null ? "" : v.Value ? "Pagati" : "Da pagare")">
+                    <MudSelectItem T="bool?" Value="true">Pagati</MudSelectItem>
+                    <MudSelectItem T="bool?" Value="false">Da pagare</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            @if (_metadata.View_Caparra)
+            {
+                <MudItem xs="6" sm="4" md="2">
+                    <MudSelect T="bool?" @bind-Value="_filtro.Caparra" @bind-Value:after="Applica" Label="Caparra" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Clearable="true" AnchorOrigin="Origin.BottomCenter"
+                               ToStringFunc="@(v => v == null ? "" : v.Value ? "Versata" : "Non versata")">
+                        <MudSelectItem T="bool?" Value="true">Versata</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">Non versata</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            }
+            @if (_metadata.View_Priority)
+            {
+                <MudItem xs="6" sm="4" md="2">
+                    <MudSelect T="bool?" @bind-Value="_filtro.Priority" @bind-Value:after="Applica" Label="Priorità" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Clearable="true" AnchorOrigin="Origin.BottomCenter"
+                               ToStringFunc="@(v => v == null ? "" : v.Value ? "Con priorità" : "Senza priorità")">
+                        <MudSelectItem T="bool?" Value="true">Con priorità</MudSelectItem>
+                        <MudSelectItem T="bool?" Value="false">Senza priorità</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            }
+            <MudItem xs="6" sm="4" md="2">
+                <MudSelect T="OrdinamentoIscritti" @bind-Value="_filtro.Ordinamento" @bind-Value:after="Applica" Label="Ordina per"
+                           Variant="Variant.Outlined" Margin="Margin.Dense" AnchorOrigin="Origin.BottomCenter" ToStringFunc="DescOrdinamento">
+                    @foreach (var o in Enum.GetValues<OrdinamentoIscritti>())
+                    {
+                        <MudSelectItem T="OrdinamentoIscritti" Value="o">@DescOrdinamento(o)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+
+        <div class="d-flex align-center flex-wrap gap-2 mb-2">
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">
+                @(_visibili.Count == _tutti.Count ? $"{_tutti.Count} iscritti" : $"{_visibili.Count} di {_tutti.Count} iscritti")
+            </MudText>
+            @if (_filtro.FiltriAttivi > 0)
+            {
+                <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.FilterAltOff" OnClick="AzzeraFiltri">
+                    Azzera filtri
+                </MudButton>
+            }
+        </div>
+
+        @* ---------- Schermi larghi: tabella ---------- *@
+        <MudHidden Breakpoint="Breakpoint.SmAndDown">
+            <MudTable T="IscrittoListaItem" Items="_visibili" Hover="true" Dense="true" Outlined="true" Elevation="0"
+                      Breakpoint="Breakpoint.None" RowsPerPage="50" OnRowClick="OnRowClick"
+                      RowClass="@(PuoAprire ? "cursor-pointer" : null)">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel T="IscrittoListaItem" SortBy="@(x => x.Cognome)">Cognome</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="IscrittoListaItem" SortBy="@(x => x.Nome)">Nome</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="IscrittoListaItem" SortBy="@(x => x.DataNascita ?? DateTime.MaxValue)">Nato il</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="IscrittoListaItem" SortBy="@(x => x.Anno ?? int.MaxValue)">Classe</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel T="IscrittoListaItem" SortBy="@(x => x.Pagato)">Pagato</MudTableSortLabel></MudTh>
+                    @if (_metadata.View_Caparra)
+                    {
+                        <MudTh><MudTableSortLabel T="IscrittoListaItem" SortBy="@(x => x.CaparraPagata)">Caparra</MudTableSortLabel></MudTh>
+                    }
+                    @if (_metadata.View_Priority)
+                    {
+                        <MudTh><MudTableSortLabel T="IscrittoListaItem" SortBy="@(x => x.Priority)">Priorità</MudTableSortLabel></MudTh>
+                    }
+                    <MudTh>Note</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Cognome"><b>@context.Cognome</b></MudTd>
+                    <MudTd DataLabel="Nome">@context.Nome</MudTd>
+                    <MudTd DataLabel="Nato il">@context.DataNascitaDesc</MudTd>
+                    <MudTd DataLabel="Classe">@context.AnnoDesc</MudTd>
+                    <MudTd DataLabel="Pagato">@StatoPagato(context)</MudTd>
+                    @if (_metadata.View_Caparra)
+                    {
+                        <MudTd DataLabel="Caparra">
+                            @if (context.CaparraPagata)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Savings" Color="Color.Info" Size="Size.Small" Title="Caparra versata" />
+                            }
+                        </MudTd>
+                    }
+                    @if (_metadata.View_Priority)
+                    {
+                        <MudTd DataLabel="Priorità">
+                            @if (context.Priority)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Secondary" Size="Size.Small" Title="Priorità" />
+                            }
+                        </MudTd>
+                    }
+                    <MudTd DataLabel="Note">
+                        <div title="@context.Note" style="max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                            <MudText Typo="Typo.body2" Inline="true">@context.Note</MudText>
+                        </div>
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText Typo="Typo.body2" Class="pa-4">@TestoNessunRisultato</MudText>
+                </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="@(new[] { 25, 50, 100, int.MaxValue })" RowsPerPageString="Righe per pagina:"
+                                   AllItemsText="Tutte" InfoFormat="{first_item}-{last_item} di {all_items}" />
+                </PagerContent>
+            </MudTable>
+        </MudHidden>
+
+        @* ---------- Telefono: schede ---------- *@
+        <MudHidden Breakpoint="Breakpoint.SmAndDown" Invert="true">
+            @if (_visibili.Count == 0)
+            {
+                <MudPaper Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.body2">@TestoNessunRisultato</MudText>
+                </MudPaper>
+            }
+            <MudStack Spacing="2">
+                @foreach (var i in _visibili.Take(_schedeMostrate))
+                {
+                    var item = i;
+                    <MudPaper Outlined="true" Class="@($"pa-3 {(PuoAprire ? "cursor-pointer" : "")}")" @onclick="() => Apri(item)">
+                        <div class="d-flex align-center gap-2">
+                            <div class="flex-grow-1" style="min-width: 0">
+                                <div class="d-flex align-center gap-1">
+                                    <MudText Typo="Typo.subtitle1" Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                                        <b>@item.Cognome</b> @item.Nome
+                                    </MudText>
+                                    @if (_metadata.View_Priority && item.Priority)
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Secondary" Size="Size.Small" Title="Priorità" />
+                                    }
+                                </div>
+                                <MudText Typo="Typo.caption" Class="mud-text-secondary">@DettaglioScheda(item)</MudText>
+                            </div>
+                            @StatoPagato(item)
+                        </div>
+                        @if (_metadata.View_Caparra && item.CaparraPagata)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined"
+                                     Icon="@Icons.Material.Outlined.Savings" Class="ml-0 mt-1">Caparra versata</MudChip>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(item.Note))
+                        {
+                            <MudText Typo="Typo.caption" Class="d-block mt-1"
+                                     Style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+                                <MudIcon Icon="@Icons.Material.Outlined.StickyNote2" Size="Size.Small" Style="vertical-align: middle; font-size: 1rem" />
+                                @item.Note
+                            </MudText>
+                        }
+                    </MudPaper>
                 }
-            </tbody>
-        </table>
-    </div>
-
-    @if (IsBusy)
-    {
-        <div class="loader">
-            <span class="spinner-border" role="status"></span>
-        </div>
-    }
-</div>
-@if (IsPopupAperto)
-{
-    <div class="modal-overlay" @onclick="() => ChiudiPopup(false)">
-        <div class="modal-content" @onclick:stopPropagation>
-            @if (IsPopupLoading)
+            </MudStack>
+            @if (_visibili.Count > _schedeMostrate)
             {
-                <div class="popup-loader">
-                    <LoadingView @ref="PopupLoadingOverlay" />
-                </div>
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" Class="mt-3"
+                           OnClick="() => _schedeMostrate += PassoSchede">
+                    Mostra altri (@(_visibili.Count - _schedeMostrate))
+                </MudButton>
             }
-            else
-            {
-                <button class="modal-close" @onclick="() => ChiudiPopup(false)">×</button>
-                <ModuloIscrizioneView FormModel="iscrizioneDaModificare"
-                                      OnSubmitCallback="SalvaIscrizione"
-                                      IsReadOnly="IsReadOnly" IsSubmitting="IsSubmitting"
-                                      ChiudiMainPopup="() => ChiudiPopup(true)" />
-            }
-        </div>
-    </div>
-    @if (succededPopup)
-    {
-        <div class="succeded-popup-overlay">
-            <div class="succeded-popup-content">
-                <h3>Salvataggio completato</h3>
-                <p>Vuoi continuare a modificare l'iscrizione?</p>
-                <div class="popup-buttons">
-                    <button class="btn-yes" @onclick="ContinuaModifica">Sì</button>
-                    <button class="btn-no" @onclick="() => ChiudiPopup(false)">No</button>
-                </div>
-            </div>
-        </div>
+        </MudHidden>
     }
-}
-@if (showErrorPopup)
-{
-    <div class="error-popup-overlay">
-        <div class="error-popup-content">
-            <button class="error-popup-close" @onclick="CloseErrorPopup">×</button>
-            <h3>Errore durante il salvataggio</h3>
-            <p style="white-space: pre-wrap;">@errorMessage</p>
-        </div>
-    </div>
-}
-
+</PaginaProtetta>
 
 @code {
-    private LoadingView? LoadingOverlay;
-    private LoadingView? PopupLoadingOverlay;
-    private bool IsLoading = true;
-    private bool IsBusy = false;
+    private const int PassoSchede = 40;
 
-    private void OrdinaCognome() => OrdinaPer("Cognome");
-    private void OrdinaNome() => OrdinaPer("Nome");
-    private void OrdinaDataNascita() => OrdinaPer("DataNascita");
-    private void OrdinaAnno() => OrdinaPer("Anno");
-    private void OrdinaPagato() => OrdinaPer("Pagato");
+    // Filtri ricordati finché resta aperta l'app, per tornare dalla scheda alla stessa lista
+    private static FiltroIscritti? _filtroSalvato;
+    private static int? _eventoFiltroSalvato;
 
-    private List<VIscrizioneCompleta> _tuttiGliIscritti = new();
-    private List<VIscrizioneCompleta> Iscritti = new();
+    private bool _caricamento = true;
+    private string? _errore;
+    private EventoMetadata _metadata = new();
+    private List<AnnoScolastico> _anniScolastici = new();
+    private List<IscrittoListaItem> _tutti = new();
+    private List<IscrittoListaItem> _visibili = new();
+    private RiepilogoIscritti _riepilogo = new();
+    private FiltroIscritti _filtro = new();
+    private int _schedeMostrate = PassoSchede;
+    private readonly HashSet<int> _inAggiornamento = new();
 
-    // Filtri
-    // codice C#
-    private string _filtroCognome = string.Empty;
+    private bool PuoAprire => AppState.CanAny(Permessi.IscrittiView, Permessi.IscrittiEdit);
+    private bool PuoSegnarePagato => AppState.CanAny(Permessi.IscrittiPagamenti, Permessi.IscrittiEdit);
 
-    private void OnFiltroCognomeInput(ChangeEventArgs e)
-    {
-        _filtroCognome = e.Value?.ToString() ?? string.Empty;
-        ApplicaFiltroOrdinamento();
-    }
-    private string _filtroNome;
-    private void OnFiltroNomeInput(ChangeEventArgs e)
-    {
-        _filtroNome = e.Value?.ToString() ?? string.Empty;
-        ApplicaFiltroOrdinamento();
-    }
-    private string _filtroDataNascita;
-    private void OnFiltroDataNascitaInput(ChangeEventArgs e)
-    {
-        _filtroDataNascita = e.Value?.ToString() ?? string.Empty;
-        ApplicaFiltroOrdinamento();
-    }
-    private int? _filtroAnnoValue;
-    private int? _filtroPagatoValue;
-    private void OnFiltroAnnoChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v))
-            _filtroAnnoValue = v;
-        else
-            _filtroAnnoValue = null;
-
-        ApplicaFiltroOrdinamento();
-    }
-
-    private void OnFiltroPagatoChanged(ChangeEventArgs e)
-    {
-        if (int.TryParse(e.Value?.ToString(), out var v))
-            _filtroPagatoValue = v;
-        else
-            _filtroPagatoValue = null;
-
-        ApplicaFiltroOrdinamento();
-    }
-
-    // Ordinamento
-    private string _ordinePer = "IdIscrizione"; // default
-    private bool? _ordineAsc = null; // true = asc, false = desc, null = nessuno 
-
-    // Header
-    private string HeaderCognome => _ordinePer == "Cognome" ? "Cognome " + (_ordineAsc == true ? "↑" : _ordineAsc == false ? "↓" : "") : "Cognome";
-    private string HeaderNome => _ordinePer == "Nome" ? "Nome " + (_ordineAsc == true ? "↑" : _ordineAsc == false ? "↓" : "") : "Nome";
-    private string HeaderDataNascita => _ordinePer == "DataNascita" ? "Data di nascita " + (_ordineAsc == true ? "↑" : _ordineAsc == false ? "↓" : "") : "Data di nascita";
-    private string HeaderAnno => _ordinePer == "Anno" ? "Anno " + (_ordineAsc == true ? "↑" : _ordineAsc == false ? "↓" : "") : "Anno";
-    private string HeaderPagato => _ordinePer == "Pagato" ? "Pagato " + (_ordineAsc == true ? "↑" : _ordineAsc == false ? "↓" : "") : "Pagato";
-
-    // Picker
-    private List<AnnoScolastico> AnniScolastici = new();
-    private List<FiltroPagatoItem> FiltriPagati = new()
-    {
-        new FiltroPagatoItem(null, "Tutti"),
-        new FiltroPagatoItem(1, "Si"),
-        new FiltroPagatoItem(0, "No")
-    };
+    private string TestoNessunRisultato => _tutti.Count == 0
+        ? "Nessun iscritto in questo evento."
+        : "Nessun iscritto corrisponde ai filtri.";
 
     protected override async Task OnInitializedAsync()
     {
-        LoadingOverlay?.Start();
-        IsLoading = true;
+        // Senza sessione o evento PaginaProtetta reindirizza: inutile interrogare il server
+        if (!AppState.IsAuthenticated || !AppState.HasEvento)
+            return;
 
-        AnniScolastici = new List<AnnoScolastico> { new AnnoScolastico(null, "Tutti") };
-        var eventMetadata = await IscrizioneCompletaController.GetEventMetadataAsync();
-        AnniScolastici.AddRange(await IscrizioneCompletaController.GetAnniScolasticiAsync(JsonConvert.DeserializeObject<int[]>(eventMetadata.GradiScuolaAllowed)));
+        if (_filtroSalvato != null && _eventoFiltroSalvato == AppState.EventoCorrente?.EventId)
+            _filtro = _filtroSalvato.Clona();
 
-        await CaricaIscrittiAsync();
-
-        IsLoading = false;
-        LoadingOverlay?.Stop();
+        await CaricaAsync();
     }
 
-    private async Task CaricaIscrittiAsync()
+    private async Task CaricaAsync()
     {
-        IsBusy = true;
-
-        _tuttiGliIscritti = await IscrittiListaController.LoadIscrittiAsync();
-
-        ApplicaFiltroOrdinamento();
-
-        IsBusy = false;
-    }
-
-    private Task ApplicaFiltroOrdinamento()
-    {
-        IEnumerable<VIscrizioneCompleta> query = _tuttiGliIscritti;
-
-        if (!string.IsNullOrWhiteSpace(_filtroCognome))
-            query = query.Where(x => x.BCognome.Contains(_filtroCognome, StringComparison.OrdinalIgnoreCase));
-
-        if (!string.IsNullOrWhiteSpace(_filtroNome))
-            query = query.Where(x => x.BNome.Contains(_filtroNome, StringComparison.OrdinalIgnoreCase));
-
-        if (!string.IsNullOrWhiteSpace(_filtroDataNascita))
-            query = query.Where(x => x.DataNascitaDesc.Contains(_filtroDataNascita));
-
-        if (_filtroAnnoValue != null)
-            query = query.Where(x => x.Anno == _filtroAnnoValue.Value);
-
-        if (_filtroPagatoValue != null)
-            query = query.Where(x => x.Pagato == (_filtroPagatoValue.Value == 1));
-
-        query = (_ordinePer, _ordineAsc) switch
-        {
-            ("Nome", true) => query.OrderBy(x => x.BNome),
-            ("Nome", false) => query.OrderByDescending(x => x.BNome),
-            ("DataNascita", true) => query.OrderBy(x => x.DataNascita),
-            ("DataNascita", false) => query.OrderByDescending(x => x.DataNascita),
-            ("Anno", true) => query.OrderBy(x => x.Anno),
-            ("Anno", false) => query.OrderByDescending(x => x.Anno),
-            ("Pagato", true) => query.OrderBy(x => x.Pagato),
-            ("Pagato", false) => query.OrderByDescending(x => x.Pagato),
-            (_, null) => query.OrderBy(x => x.IdIscrizione), // nessun ordinamento specifico -> default
-            _ => query.OrderBy(x => x.BCognome) // caso iniziale
-        };
-
-        Iscritti = query.ToList();
-
-        StateHasChanged(); // forza il refresh
-        return Task.CompletedTask;
-    }
-
-    private void OrdinaPer(string colonna)
-    {
-        if (_ordinePer == colonna)
-        {
-            // cicla tra asc -> desc -> nessuno
-            if (_ordineAsc == true) _ordineAsc = false;
-            else if (_ordineAsc == false) _ordineAsc = null; // nessuno
-            else _ordineAsc = true; // riparte da ascendente
-        }
-        else
-        {
-            _ordinePer = colonna;
-            _ordineAsc = true;
-        }
-
-        ApplicaFiltroOrdinamento();
-    }
-
-
-    private async Task OnPagatoChanged(VIscrizioneCompleta item, ChangeEventArgs e)
-    {
-        item.Pagato = (bool)e.Value;
-        await IscrittiListaController.AggiornaPagatoAsync(item);
-    }
-
-    private bool IsPopupAperto = false;
-    private bool IsPopupLoading = true;
-    private ModuloIscrizioneDto iscrizioneDaModificare = new();
-    private async Task OnIscrittoSelected(VIscrizioneCompleta item)
-    {
-        IsPopupAperto = true;
-        IsPopupLoading = true;
-        PopupLoadingOverlay?.Start();
-
-        StateHasChanged(); // forza il render immediato del popup
-
-        iscrizioneDaModificare = await IscrizioneCompletaController.GetAsync(item.IdBambino);
-
-        IsPopupLoading = false;
-        PopupLoadingOverlay?.Stop();
-
-        StateHasChanged();
-    }
-
-    private async Task ChiudiPopup(bool? refreshList)
-    {
-        await CaricaIscrittiAsync();
-        succededPopup = false;
-        IsPopupAperto = false;
-        iscrizioneDaModificare = new ModuloIscrizioneDto();
-    }
-    private bool IsReadOnly = false;
-    private bool IsSubmitting = false;
-    private bool showErrorPopup = false;
-    private string errorMessage = string.Empty;
-    private bool succededPopup = false;
-
-    private async Task SalvaIscrizione(ModuloIscrizioneDto model)
-    {
-        IsSubmitting = true; // disabilita il form
-        IsReadOnly = true;
-        bool succeded = false;
+        _caricamento = true;
+        _errore = null;
         try
         {
-            var validate = ModuloIscrizioneValidator.Validate(model);
-            if (validate != "")
-                throw new Exception(validate);
-
-            if (model.IdBambino != null)
-            {
-                succeded = await IscrizioneCompletaController.UpdateAsync(model);
-            }
-            else
-            {
-                succeded = await IscrizioneCompletaController.CreateAsync(model);
-            }
-
-            if (succeded)
-            {
-                succededPopup = true; // mostra popup di successo
-            }
+            var dati = await IscrittiListaController.CaricaListaAsync();
+            _metadata = dati.Metadata;
+            _anniScolastici = dati.AnniScolastici;
+            _tutti = dati.Iscritti;
+            Applica();
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message; // salva il messaggio da mostrare
-            showErrorPopup = true;      // mostra popup
-            Console.WriteLine($"Errore durante il salvataggio: {ex.Message}");
+            _errore = ex.Message;
         }
-
-        if (succeded)
+        finally
         {
-            Console.WriteLine($"Salvata iscrizione: {model.Nome} {model.Cognome}");
+            _caricamento = false;
         }
-
-        IsSubmitting = false;
-        IsReadOnly = false;
     }
 
-    private void ContinuaModifica()
+    private void Applica() => AggiornaVista(ricominciaSchede: true);
+
+    private void AggiornaVista(bool ricominciaSchede)
     {
-        succededPopup = false;
+        _visibili = IscrittiListaController.Filtra(_tutti, _filtro);
+        _riepilogo = IscrittiListaController.Riepiloga(_tutti, _anniScolastici);
+        if (ricominciaSchede)
+            _schedeMostrate = PassoSchede;
+        _filtroSalvato = _filtro.Clona();
+        _eventoFiltroSalvato = AppState.EventoCorrente?.EventId;
     }
 
-    private void CloseErrorPopup()
+    private void AzzeraFiltri()
     {
-        succededPopup = false;
-        showErrorPopup = false;
-        errorMessage = string.Empty;
+        _filtro.Azzera();
+        Applica();
     }
 
-    [Inject]
-    private NavigationManager Navigation { get; set; } = default!;
-    private void TornaIndietro()
+    private void FiltroRapidoPagato(bool valore)
     {
-        Navigation.NavigateTo("", true); // "/" è la home, oppure puoi cambiare con la pagina precedente
+        _filtro.Pagato = _filtro.Pagato == valore ? null : valore;
+        Applica();
+    }
+
+    private void FiltroRapidoCaparra()
+    {
+        _filtro.Caparra = _filtro.Caparra == true ? null : true;
+        Applica();
+    }
+
+    private void FiltroRapidoPriority()
+    {
+        _filtro.Priority = _filtro.Priority == true ? null : true;
+        Applica();
+    }
+
+    private void FiltroRapidoAnno(int anno)
+    {
+        _filtro.Anno = _filtro.Anno == anno ? null : anno;
+        Applica();
+    }
+
+    private string DescAnno(int? anno) => anno switch
+    {
+        null => "",
+        FiltroIscritti.AnnoNonIndicato => "Non indicato",
+        _ => _anniScolastici.FirstOrDefault(a => a.Id == anno)?.Desc ?? anno.Value.ToString(),
+    };
+
+    private static string DescOrdinamento(OrdinamentoIscritti o) => o switch
+    {
+        OrdinamentoIscritti.Recenti => "Ultimi inseriti",
+        OrdinamentoIscritti.Anno => "Classe",
+        OrdinamentoIscritti.DataNascita => "Data di nascita",
+        _ => "Cognome",
+    };
+
+    private static string DettaglioScheda(IscrittoListaItem item) =>
+        string.Join(" · ", new[] { item.AnnoDesc, item.DataNascita != null ? $"nato il {item.DataNascitaDesc}" : "" }
+            .Where(s => !string.IsNullOrEmpty(s)));
+
+    private void OnRowClick(TableRowClickEventArgs<IscrittoListaItem> args)
+    {
+        if (args.Item != null)
+            Apri(args.Item);
+    }
+
+    private void Apri(IscrittoListaItem item)
+    {
+        if (PuoAprire)
+            Navigation.NavigateTo($"{Rotte.Iscritti}/{item.IdBambino}");
+    }
+
+    /// <summary>Interruttore "pagato" per chi può modificarlo, altrimenti solo lo stato.</summary>
+    private RenderFragment StatoPagato(IscrittoListaItem item) =>
+        @<div @onclick:stopPropagation="true">
+            @if (PuoSegnarePagato && item.IdIscrizione != null)
+            {
+                <MudTooltip Text="@(item.Pagato ? "Pagato: tocca per segnare da pagare" : "Da pagare: tocca per segnare pagato")">
+                    <MudSwitch T="bool" Value="item.Pagato" ValueChanged="@((bool v) => CambiaPagatoAsync(item, v))"
+                               Color="Color.Success" UncheckedColor="Color.Warning" Disabled="_inAggiornamento.Contains(item.IdBambino)"
+                               aria-label="@($"Pagato {item.NomeCompleto}")" />
+                </MudTooltip>
+            }
+            else if (item.Pagato)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Text" Icon="@Icons.Material.Filled.CheckCircle">Pagato</MudChip>
+            }
+            else
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Text" Icon="@Icons.Material.Outlined.PendingActions">Da pagare</MudChip>
+            }
+        </div>;
+
+    /// <summary>Aggiornamento ottimistico: in caso di errore torna al valore precedente.</summary>
+    private async Task CambiaPagatoAsync(IscrittoListaItem item, bool valore)
+    {
+        if (item.IdIscrizione is not int idIscrizione || item.Pagato == valore || !_inAggiornamento.Add(item.IdBambino))
+            return;
+
+        var precedente = item.Pagato;
+        item.Pagato = valore;
+        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await IscrittiListaController.AggiornaPagatoAsync(idIscrizione, valore);
+            Snackbar.Add($"{item.NomeCompleto}: {(valore ? "pagato" : "da pagare")}", Severity.Success, opzioni =>
+            {
+                opzioni.Action = "Annulla";
+                opzioni.OnClick = _ => CambiaPagatoAsync(item, precedente);
+            });
+        }
+        catch (Exception ex)
+        {
+            item.Pagato = precedente;
+            Snackbar.Add($"Pagamento di {item.NomeCompleto} non aggiornato: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _inAggiornamento.Remove(item.IdBambino);
+            AggiornaVista(ricominciaSchede: false);
+            await InvokeAsync(StateHasChanged);
+        }
     }
 }

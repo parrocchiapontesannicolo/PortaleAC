@@ -36,11 +36,11 @@ public class Iscrizione : EventModel
   [Column("ricevuta")]
   public bool Ricevuta { get; set; }
     [Column("desc_ricevuta")]
-    public string DescRicevuta { get; set; }
+    public string? DescRicevuta { get; set; }
     [Column("esce_solo")]
     public bool EsceSolo { get; set; }
   [Column("email_genitore")]
-    public string EmailGenitore { get; set; }
+    public string? EmailGenitore { get; set; }
   [Column("caparra_pagata")]
   public bool CaparraPagata { get; set; }
   [Column("priority")]
