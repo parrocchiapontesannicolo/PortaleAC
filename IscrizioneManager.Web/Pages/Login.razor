@@ -22,6 +22,28 @@
         }
         else
         {
+            @if (AuthService.RipristinoDaRiprovare)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4">
+                    Server non raggiungibile: la sessione salvata non è andata persa.
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" Class="ml-2"
+                               OnClick="RiprovaConnessione" Disabled="_ripristinoInCorso">Riprova connessione</MudButton>
+                </MudAlert>
+            }
+            else if (!string.IsNullOrEmpty(_avvisoRipristino))
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">@_avvisoRipristino</MudAlert>
+            }
+
+            @if (!string.IsNullOrEmpty(_erroreAccount))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">
+                    @_erroreAccount
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Inherit" Class="ml-2"
+                               OnClick="CaricaAccountAsync">Riprova</MudButton>
+                </MudAlert>
+            }
+
             <EditForm Model="this" OnSubmit="Accedi">
                 <MudStack Spacing="4">
                     <MudSelect T="LoginAccount" @bind-Value="_account" Label="Account" Variant="Variant.Outlined"
@@ -71,7 +93,10 @@
     private bool _mostraPassword;
     private bool _caricamento = true;
     private bool _inCorso;
+    private bool _ripristinoInCorso;
     private string? _errore;
+    private string? _erroreAccount;
+    private string? _avvisoRipristino;
 
     protected override async Task OnInitializedAsync()
     {
@@ -81,17 +106,53 @@
             return;
         }
 
+        await CaricaAccountAsync();
+        _caricamento = false;
+    }
+
+    private async Task CaricaAccountAsync()
+    {
+        _erroreAccount = null;
         try
         {
             _accounts = await AuthService.GetLoginAccountsAsync();
             if (_accounts.Count == 1)
                 _account = _accounts[0];
+            else if (_account != null)
+                _account = _accounts.FirstOrDefault(a => a.Email == _account.Email);
         }
         catch (Exception ex)
         {
-            _errore = "Impossibile caricare gli account: " + ex.Message;
+            Console.WriteLine($"Caricamento account: {ex}");
+            _erroreAccount = "Impossibile contattare il server per caricare gli account. Controlla la connessione e riprova.";
         }
-        _caricamento = false;
+    }
+
+    /// <summary>Riprova il ripristino della sessione salvata, fallito per problemi di rete.</summary>
+    private async Task RiprovaConnessione()
+    {
+        if (_ripristinoInCorso)
+            return;
+
+        _ripristinoInCorso = true;
+        _avvisoRipristino = null;
+        try
+        {
+            if (await AuthService.TryRestoreSessionAsync())
+            {
+                Navigation.NavigateTo(AppState.HasEvento ? Rotte.Home : Rotte.Eventi);
+                return;
+            }
+
+            if (!AuthService.RipristinoDaRiprovare)
+                _avvisoRipristino = "La sessione salvata non è più valida: accedi di nuovo con la password.";
+            if (_accounts.Count == 0)
+                await CaricaAccountAsync();
+        }
+        finally
+        {
+            _ripristinoInCorso = false;
+        }
     }
 
     private async Task Accedi()
@@ -108,6 +169,7 @@
         }
         catch (Exception ex)
         {
+            // AuthService restituisce già messaggi leggibili
             _errore = ex.Message;
             _password = string.Empty;
         }

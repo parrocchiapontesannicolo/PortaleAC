@@ -51,7 +51,7 @@ namespace IscrizioneManager.Core.Services
 
       var account = await client.Rpc<List<AccountCorrente>>("my_account", new Dictionary<string, object>());
       Account = account?.FirstOrDefault()
-        ?? throw new InvalidOperationException("Account disattivato o non configurato. Contatta l'amministratore.");
+        ?? throw new AccountNonAttivoException();
 
       _eventi = await client.Rpc<List<MioEvento>>("my_events", new Dictionary<string, object>()) ?? new();
 
@@ -103,5 +103,12 @@ namespace IscrizioneManager.Core.Services
       if (ClientHolder.IsInitialized)
         ClientHolder.Client.EnsureEventId(evento?.EventId ?? 0);
     }
+  }
+
+  /// <summary>L'utente autenticato non ha un account attivo (my_account vuoto).</summary>
+  public sealed class AccountNonAttivoException : InvalidOperationException
+  {
+    public AccountNonAttivoException()
+      : base("Account disattivato o non configurato. Contatta l'amministratore.") { }
   }
 }

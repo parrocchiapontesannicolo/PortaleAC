@@ -16,4 +16,11 @@
     <ProjectReference Include="..\IscrizioneManager.Core\IscrizioneManager.Core\IscrizioneManager.Core.csproj" />
   </ItemGroup>
 
+  <!-- GitHub Pages serve 404.html per i link diretti e i refresh (es. /PortaleAC/iscritti):
+       lo generiamo da index.html a ogni publish, così i due file non possono divergere.
+       Nel deploy la riscrittura di <base href> va fatta su entrambi i file. -->
+  <Target Name="Genera404DaIndex" AfterTargets="Publish">
+    <Copy SourceFiles="$(PublishDir)wwwroot/index.html" DestinationFiles="$(PublishDir)wwwroot/404.html" />
+  </Target>
+
 </Project>
