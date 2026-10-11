@@ -112,7 +112,13 @@ due volte di fila e 113 test per ogni tipo di account.
 
 ## Pubblicazione su GitHub Pages
 
+Il sito è pubblicato su **https://portale.parrocchiapontesannicolo.com**
+(dominio personalizzato di GitHub Pages: file `CNAME` nella root e record DNS
+CNAME `portale` → `parrocchiapontesannicolo.github.io` nel pannello domini di
+WordPress.com). Il vecchio indirizzo `parrocchiapontesannicolo.github.io/PortaleAC/`
+reindirizza lì.
+
 `dotnet publish -c Release` genera anche `wwwroot/404.html` identico a
-`index.html` (serve per i link diretti e il refresh delle pagine). Quando copi
-la build nella root del repository, imposta `<base href="/PortaleAC/" />` in
-**entrambi** i file.
+`index.html` (serve per i link diretti e il refresh delle pagine). Copia la
+build nella root del repository così com'è: con il dominio personalizzato il
+`<base href="/" />` va lasciato invariato in **entrambi** i file.
