@@ -20,10 +20,12 @@ builder.Services.AddSingleton<LocalStorageService>();
 builder.Services.AddSingleton<AppState>();
 builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<ModuloIscrizioneViewModel>();
+builder.Services.AddSingleton<TemaService>();
 builder.Logging.SetMinimumLevel(LogLevel.Warning);
 
 var host = builder.Build();
 
+await host.Services.GetRequiredService<TemaService>().CaricaAsync();
 await host.Services.GetRequiredService<AuthService>().TryRestoreSessionAsync();
 
 await host.RunAsync();

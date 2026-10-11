@@ -1,0 +1,20 @@
+@implements IDisposable
+@inject TemaService Tema
+
+<MudThemeProvider @ref="_provider" Theme="AppTheme.Theme" IsDarkMode="Tema.IsDarkMode" />
+
+@code {
+    private MudThemeProvider? _provider;
+
+    protected override void OnInitialized() => Tema.Changed += OnChanged;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _provider != null)
+            await Tema.OsservaSistemaAsync(_provider);
+    }
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Tema.Changed -= OnChanged;
+}
