@@ -1,115 +1,119 @@
-/* Sfondo globale */
-/* Applica a html, body e div #app */
-html, body, #app {
-    min-height: 100vh;
+/* Stili globali minimi: il resto è MudBlazor (vedi Layout/AppTheme.cs) */
+
+html, body {
     margin: 0;
     padding: 0;
-    font-family: "Lato", sans-serif;
-    background-color: white; /* fallback chiaro */
-    color: black;
+    min-height: 100vh;
 }
 
-input, select {
-    background-color: white;
-    color: black;
-    border: 1px solid black;
-    border-radius: 4px;
-    padding: 8px;
+/* Schermata di avvio prima che Blazor sia pronto */
+.boot-screen {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    font-family: Roboto, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #1F4E8C;
+    background: #F5F7FB;
 }
 
-@media (prefers-color-scheme: dark) {
-    html, body, #app {
-        background-color: #1E1E1E !important; /* grigio scuro */
-        color: #FFFFFF !important; /* testo bianco */
+.boot-spinner {
+    width: 44px;
+    height: 44px;
+    border: 4px solid rgba(31, 78, 140, 0.2);
+    border-top-color: #1F4E8C;
+    border-radius: 50%;
+    animation: boot-spin 0.9s linear infinite;
+}
+
+@keyframes boot-spin {
+    to { transform: rotate(360deg); }
+}
+
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 2000;
+    padding: 12px 20px;
+    background: #FDECEA;
+    color: #611A15;
+    box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.2);
+    font-family: Roboto, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+    #blazor-error-ui .reload {
+        margin-left: 8px;
+        font-weight: 600;
     }
 
-    input, select {
-        background-color: #222;
-        color: white;
-        border: 1px solid #555;
-        border-radius: 4px;
-        padding: 8px;
+    #blazor-error-ui .dismiss {
+        float: right;
+        cursor: pointer;
     }
 
-    button {
-        background-color: #1ABC9C;
-        color: white;
-    }
+/* Login */
+.empty-layout {
+    min-height: 100vh;
+    background: linear-gradient(160deg, #1F4E8C 0%, #2D6CB5 55%, #E8A317 160%);
 }
 
-input:focus, select:focus {
-    outline: 2px solid #1ABC9C;
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
 }
 
-/*#app svg.loading-progress {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 999;
-    fill: none;
-    stroke: #1ABC9C;
-}*/
-input[type="checkbox"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 24px;
-    height: 24px;
-    border: 2px solid #1ABC9C;
-    border-radius: 4px;
-    position: relative;
+.login-card {
+    width: 100%;
+    max-width: 420px;
+}
+
+/* Selettore evento nella barra in alto */
+.evento-switcher-label {
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Scelta evento */
+.evento-card {
     cursor: pointer;
+    height: 100%;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
-    /* normal checked */
-    input[type="checkbox"]:checked {
-        background-color: #1ABC9C;
+    .evento-card:hover {
+        transform: translateY(-2px);
     }
 
-    /* disabled unchecked */
-    input[type="checkbox"]:disabled {
-        border-color: #ccc;
-        background-color: #eee;
-        cursor: not-allowed;
-    }
-
-        /* disabled checked */
-        input[type="checkbox"]:disabled:checked {
-            border-color: #888;
-            background-color: #bbb;
-        }
-
-    /* checkmark using ::after */
-    input[type="checkbox"]:checked::after {
-        content: '';
-        position: absolute;
-        left: 6px;
-        top: 2px;
-        width: 6px;
-        height: 12px;
-        border: solid white;
-        border-width: 0 2px 2px 0;
-        transform: rotate(45deg);
-    }
-/* Pulsanti stile MAUI */
-button {
-    background-color: #1ABC9C;
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 10px 16px;
-    font-weight: bold;
-    cursor: pointer;
+.evento-card-corrente {
+    border: 2px solid var(--mud-palette-primary);
 }
 
-    button:disabled {
-        background-color: gray;
-        color: white;
-    }
-
-/* Label */
-label {
-    display: block;
-    margin-top: 10px;
-    margin-bottom: 4px;
+/* Contenuto Google incorporato */
+.embed-frame {
+    width: 100%;
+    height: calc(100vh - 170px);
+    min-height: 420px;
+    border: 0;
+    border-radius: var(--mud-default-borderradius);
+    background: var(--mud-palette-surface);
 }
+
+/* Riquadri della home */
+.home-tile {
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+    .home-tile:hover {
+        transform: translateY(-2px);
+        box-shadow: var(--mud-elevation-4);
+    }
