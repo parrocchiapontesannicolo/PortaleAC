@@ -1,23 +1,17 @@
-# Piano rilascio v2 (aggiornato 2026-10-10)
+# Piano rilascio v2 (aggiornato 2026-10-11)
 
 ## Stato
-- Branch `v2-evoluzione` pushato; GitHub Pages ora punta a questo branch, ma nella root c'è ancora la **build v1** (funziona col DB attuale).
-- Primo tentativo di migrazione fallito (`has_perm(bigint, unknown)`): **rollback completo, DB invariato**.
-- Schema reale esportato → migrazione corretta (NON ancora committata):
-  - `google_sheet.event_id` è bigint → cast nella policy.
-  - `create_iscrizione` / `update_iscrizione` riscritte dalle versioni reali + controllo permesso;
-    update toglie solo i genitori rimossi (non perde i genitori condivisi tra eventi).
-  - `delete_iscrizione` toglie prima `squadra_bambino` (FK senza cascade).
-- Test su copia dello schema reale in Docker: migrazione applicata 2 volte, **109/109 controlli OK**
-  (harness: scratchpad `real/run.sh`).
-- In corso: revisione indipendente (2 agenti) della migrazione.
+- Branch `v2-evoluzione`: GitHub Pages punta qui; online c'è ancora la **build v1** (funziona col DB attuale).
+- DB live **non ancora migrato** (primo tentativo annullato con rollback completo, DB invariato).
+- Migrazione corretta e committata (`supabase/migrations/20261010120000_v2_account_permessi.sql`):
+  - allineata allo schema reale (google_sheet bigint, RPC iscrizione reali, delete con squadra_bambino);
+  - revisione rifatta il 2026-10-11: chiusa una falla per cui chi modifica un evento poteva collegarsi
+    i genitori di un altro evento (`genitore_collegabile`).
+  - Test su copia dello schema reale in Docker: applicata 2 volte, **113/113 controlli OK**.
+- Build v2 pronta e **committata in locale** (commit locali NON ancora pushati).
 
 ## Da fare — Claude
-1. Leggere l'esito della revisione, correggere eventuali problemi, rilanciare i test.
-2. Committare la migrazione corretta (+ README) su `v2-evoluzione`.
-3. Preparare la build: `dotnet publish -c Release`, copiare `wwwroot` nella root
-   (`_framework/`, `index.html`, `404.html`, `css/`, `js/`), `<base href="/PortaleAC/" />` in entrambi gli html.
-   Commit locale, **push solo dopo la migrazione**.
+- Solo al "push" di Michele: `git push` di `v2-evoluzione`, poi verificare che il sito risponda con la v2.
 
 ## Da fare — Michele
 1. Backup: Dashboard → Database → Backups.
