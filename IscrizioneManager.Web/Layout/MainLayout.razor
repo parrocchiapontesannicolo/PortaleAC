@@ -3,10 +3,10 @@
 @inject AppState AppState
 @inject AuthService AuthService
 @inject NavigationManager Navigation
-@inject LocalStorageService Storage
+@inject TemaService Tema
 @inject ISnackbar Snackbar
 
-<MudThemeProvider Theme="AppTheme.Theme" @bind-IsDarkMode="_darkMode" />
+<TemaProvider />
 <MudPopoverProvider />
 <MudDialogProvider CloseButton="true" />
 <MudSnackbarProvider />
@@ -14,10 +14,13 @@
 @if (AppState.IsAuthenticated)
 {
     <MudLayout>
-        <MudAppBar Elevation="1" Dense="true">
+        <MudAppBar Elevation="0" Dense="true" Class="app-bar">
             <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                            OnClick="() => _drawerOpen = !_drawerOpen" aria-label="Menu" />
-            <MudText Typo="Typo.h6" Class="ml-2 d-none d-sm-flex">Portale AC</MudText>
+            <a href="@(AppState.HasEvento ? Rotte.Home : Rotte.Eventi)" class="app-bar-titolo ml-2 d-none d-sm-flex">
+                <span class="app-bar-nome">Portale AC</span>
+                <span class="app-bar-parrocchia d-none d-md-inline">Parrocchia di San Nicola</span>
+            </a>
 
             <MudSpacer />
 
@@ -25,7 +28,8 @@
             {
                 <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true" MaxHeight="420">
                     <ActivatorContent>
-                        <MudButton Color="Color.Inherit" Variant="Variant.Text"
+                        @* MudBlazor 9: un activator personalizzato deve aprire il menu da sé *@
+                        <MudButton Color="Color.Inherit" Variant="Variant.Text" OnClick="@context.ToggleAsync"
                                    StartIcon="@Icons.Material.Filled.Event" EndIcon="@Icons.Material.Filled.ArrowDropDown"
                                    Class="evento-switcher" Style="text-transform:none">
                             <span class="evento-switcher-label">@(AppState.EventoCorrente?.Nome ?? "Scegli evento")</span>
@@ -53,7 +57,8 @@
 
             <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight" Dense="true">
                 <ActivatorContent>
-                    <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" aria-label="Account" />
+                    <MudIconButton Icon="@Icons.Material.Filled.AccountCircle" Color="Color.Inherit" aria-label="Account"
+                                   OnClick="@context.ToggleAsync" />
                 </ActivatorContent>
                 <ChildContent>
                     <div class="px-4 py-2">
@@ -63,10 +68,19 @@
                         </MudText>
                     </div>
                     <MudDivider />
-                    <MudMenuItem Icon="@(_darkMode ? Icons.Material.Filled.LightMode : Icons.Material.Filled.DarkMode)"
-                                 OnClick="ToggleDarkMode">
-                        @(_darkMode ? "Tema chiaro" : "Tema scuro")
-                    </MudMenuItem>
+                    <MudText Typo="Typo.overline" Class="px-4 pt-2 d-block mud-text-secondary">Tema</MudText>
+                    @foreach (var (preferenza, nome, icona) in OpzioniTema)
+                    {
+                        var scelta = preferenza;
+                        <MudMenuItem Icon="@icona" OnClick="() => Tema.ImpostaAsync(scelta)">
+                            <span style="@(Tema.Preferenza == scelta ? "font-weight:700" : null)">@nome</span>
+                            @if (Tema.Preferenza == scelta)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Check" Size="Size.Small" Color="Color.Primary" Class="ml-2" Style="vertical-align:middle" />
+                            }
+                        </MudMenuItem>
+                    }
+                    <MudDivider />
                     <MudMenuItem Icon="@Icons.Material.Filled.Logout" OnClick="Logout">Esci</MudMenuItem>
                 </ChildContent>
             </MudMenu>
@@ -93,15 +107,19 @@ else
 }
 
 @code {
-    private const string DarkModeKey = "darkMode";
-    private bool _drawerOpen = true;
-    private bool _darkMode;
+    private static readonly (PreferenzaTema Preferenza, string Nome, string Icona)[] OpzioniTema =
+    {
+        (PreferenzaTema.Automatico, "Automatico", Icons.Material.Outlined.BrightnessAuto),
+        (PreferenzaTema.Chiaro, "Chiaro", Icons.Material.Outlined.LightMode),
+        (PreferenzaTema.Scuro, "Scuro", Icons.Material.Outlined.DarkMode),
+    };
 
-    protected override async Task OnInitializedAsync()
+    private bool _drawerOpen = true;
+
+    protected override void OnInitialized()
     {
         AppState.Changed += OnStateChanged;
         AppState.SessioneTerminata += OnSessioneTerminata;
-        _darkMode = await Storage.GetItem(DarkModeKey) == "1";
     }
 
     protected override void OnAfterRender(bool firstRender)
@@ -128,12 +146,6 @@ else
         {
             Snackbar.Add(ex.Message, Severity.Error);
         }
-    }
-
-    private async Task ToggleDarkMode()
-    {
-        _darkMode = !_darkMode;
-        await Storage.SetItem(DarkModeKey, _darkMode ? "1" : "0");
     }
 
     private async Task Logout()

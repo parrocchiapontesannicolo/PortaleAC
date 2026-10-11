@@ -7,13 +7,15 @@
 <PageTitle>Accedi - Portale AC</PageTitle>
 
 <div class="login-page">
-    <MudPaper Elevation="4" Class="login-card pa-6 pa-sm-8">
-        <MudStack Spacing="1" AlignItems="AlignItems.Center" Class="mb-6">
-            <MudAvatar Color="Color.Primary" Size="Size.Large">
-                <MudIcon Icon="@Icons.Material.Filled.Diversity3" />
-            </MudAvatar>
-            <MudText Typo="Typo.h5">Portale AC</MudText>
-            <MudText Typo="Typo.body2" Class="mud-text-secondary">Accedi con il tuo account</MudText>
+    <header class="login-hero">
+        <h1 class="login-hero-titolo">Parrocchia di San&nbsp;Nicola</h1>
+        <p class="login-hero-sottotitolo">Portale AC</p>
+    </header>
+
+    <MudPaper Elevation="8" Class="login-card pa-6 pa-sm-8">
+        <MudStack Spacing="1" Class="mb-6">
+            <MudText Typo="Typo.h5">Accedi</MudText>
+            <MudText Typo="Typo.body2" Class="mud-text-secondary">Scegli il tuo account e inserisci la password</MudText>
         </MudStack>
 
         @if (_caricamento)
