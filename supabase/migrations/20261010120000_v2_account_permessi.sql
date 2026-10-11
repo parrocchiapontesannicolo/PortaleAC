@@ -310,6 +310,15 @@ returns boolean language sql stable security definer set search_path = public as
   select exists (select 1 from public.tipo_consenso where id_tipo_consenso = p_id and event_id = p_event_id)
 $$;
 
+-- Un genitore si può collegare a un bambino dell'evento solo se è di quell'evento
+-- o è già collegato lì (genitori condivisi dei dati v1): altrimenti chi modifica
+-- un evento potrebbe collegarsi i genitori di un altro evento e leggerne i dati.
+create or replace function public.genitore_collegabile(p_id integer, p_event_id integer)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (select 1 from public.genitore where id_genitore = p_id and event_id = p_event_id)
+      or exists (select 1 from public.genitore_bambino where id_genitore = p_id and event_id = p_event_id)
+$$;
+
 -- Ci deve sempre essere almeno un superadmin attivo
 create or replace function public.app_account_guard_superadmin()
 returns trigger
@@ -468,7 +477,7 @@ begin
   for r in
     select * from (values
       ('genitore',             'true'),
-      ('genitore_bambino',     'public.bambino_in_evento(id_bambino, event_id)'),
+      ('genitore_bambino',     'public.bambino_in_evento(id_bambino, event_id) and public.genitore_collegabile(id_genitore, event_id)'),
       ('iscrizione_settimana', 'public.iscrizione_in_evento(id_iscrizione, event_id) and public.settimana_in_evento(id_settimana, event_id)'),
       ('iscrizione_taglia',    'public.iscrizione_in_evento(id_iscrizione, event_id) and public.taglia_in_evento(id_taglia, event_id)'),
       ('consenso',             'public.iscrizione_in_evento(id_iscrizione, event_id) and public.tipo_consenso_in_evento(id_tipo_consenso, event_id)')
@@ -927,7 +936,8 @@ begin
     'public.has_perm(integer, text)', 'public.has_any_perm(integer, text[])', 'public.can_access_event(integer)',
     'public.bambino_in_evento(integer, integer)', 'public.iscrizione_in_evento(integer, integer)',
     'public.squadra_in_evento(integer, integer)', 'public.settimana_in_evento(integer, integer)',
-    'public.taglia_in_evento(integer, integer)', 'public.tipo_consenso_in_evento(integer, integer)']
+    'public.taglia_in_evento(integer, integer)', 'public.tipo_consenso_in_evento(integer, integer)',
+    'public.genitore_collegabile(integer, integer)']
   loop
     execute format('revoke all on function %s from public, anon', f);
     execute format('grant execute on function %s to authenticated', f);

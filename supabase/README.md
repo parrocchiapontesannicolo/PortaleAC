@@ -99,15 +99,16 @@ In *Authentication → Providers → Email* conviene disattivare
 - **Riferimenti nello stesso evento**: le policy impediscono di agganciare righe
   di un evento a bambini/iscrizioni/squadre di un altro.
 - **Genitori condivisi tra eventi** (possibili con i dati v1): restano leggibili
-  e modificabili da chi gestisce l'evento del bambino collegato.
+  e modificabili da chi gestisce l'evento del bambino collegato. Si può
+  collegare un genitore solo se è dello stesso evento o è già collegato lì
+  (`genitore_collegabile`), così non si leggono i genitori di altri eventi.
 - **`delete_iscrizione`**: la funzione originale viene rinominata
   `delete_iscrizione_interna` (non chiamabile dagli utenti) e sostituita da un
   wrapper che verifica `iscritti.delete` sull'evento del bambino.
 
-La migrazione è stata provata su `supabase/postgres:15.8.1.085` con uno schema
-v1 ricostruito dai modelli C#: applicazione pulita (anche due volte di fila) e
-test per ogni tipo di account. Lo schema reale non è nel repository: per questo
-il passo 2 (dump della baseline) è importante.
+La migrazione è stata provata su `supabase/postgres:15.8.1.085` con lo schema
+reale (tabelle, policy e RPC esportate dal database): applicazione pulita anche
+due volte di fila e 113 test per ogni tipo di account.
 
 ## Pubblicazione su GitHub Pages
 
