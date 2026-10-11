@@ -1,9 +1,15 @@
-/* Stili globali minimi: il resto è MudBlazor (vedi Layout/AppTheme.cs) */
+/* Stili globali minimi: il resto è MudBlazor (vedi Layout/AppTheme.cs).
+   Lo stile riprende il sito della parrocchia (tema "Hemingway Rewritten"). */
 
 html, body {
     margin: 0;
     padding: 0;
     min-height: 100vh;
+}
+
+/* Prima che Blazor applichi il tema (data-tema lo imposta index.html) */
+html[data-tema="scuro"] body {
+    background: #121212;
 }
 
 /* Schermata di avvio prima che Blazor sia pronto */
@@ -14,16 +20,21 @@ html, body {
     align-items: center;
     justify-content: center;
     gap: 16px;
-    font-family: Roboto, "Segoe UI", Helvetica, Arial, sans-serif;
-    color: #1F4E8C;
-    background: #F5F7FB;
+    font-family: Lato, "Helvetica Neue", Arial, sans-serif;
+    color: #117A65;
+    background: #F4F4F2;
+}
+
+html[data-tema="scuro"] .boot-screen {
+    color: #1ABC9C;
+    background: #121212;
 }
 
 .boot-spinner {
     width: 44px;
     height: 44px;
-    border: 4px solid rgba(31, 78, 140, 0.2);
-    border-top-color: #1F4E8C;
+    border: 4px solid rgba(26, 188, 156, 0.25);
+    border-top-color: currentColor;
     border-radius: 50%;
     animation: boot-spin 0.9s linear infinite;
 }
@@ -43,7 +54,7 @@ html, body {
     background: #FDECEA;
     color: #611A15;
     box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.2);
-    font-family: Roboto, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-family: Lato, "Helvetica Neue", Arial, sans-serif;
 }
 
     #blazor-error-ui .reload {
@@ -56,23 +67,107 @@ html, body {
         cursor: pointer;
     }
 
-/* Login */
+/* Login: foto della chiesa come la testata del sito */
 .empty-layout {
     min-height: 100vh;
-    background: linear-gradient(160deg, #1F4E8C 0%, #2D6CB5 55%, #E8A317 160%);
+    background-color: #262626;
+    background-image: linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.35) 45%, rgba(0, 0, 0, 0.65)),
+                      url("../images/chiesa.jpg");
+    background-position: center 30%;
+    background-size: cover;
 }
 
 .login-page {
     min-height: 100vh;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 16px;
+    gap: 28px;
+    padding: 32px 16px;
+    box-sizing: border-box;
+}
+
+.login-hero {
+    text-align: center;
+    color: #FFFFFF;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.login-hero-titolo {
+    margin: 0;
+    font-family: Raleway, "Helvetica Neue", Arial, sans-serif;
+    font-size: 1.9rem;
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+}
+
+    /* FocusOnNavigate porta il focus sul primo h1: niente riquadro sul titolo */
+    .login-hero-titolo:focus {
+        outline: none;
+    }
+
+.login-hero-sottotitolo {
+    margin: 10px 0 0;
+    font-family: Lato, "Helvetica Neue", Arial, sans-serif;
+    font-size: 1.1rem;
+    font-weight: 300;
+    letter-spacing: 2px;
+}
+
+    .login-hero-sottotitolo::before {
+        content: "";
+        display: block;
+        width: 48px;
+        height: 3px;
+        margin: 0 auto 12px;
+        background: #1ABC9C;
+    }
+
+@media (max-width: 599px) {
+    .login-hero-titolo {
+        font-size: 1.35rem;
+        letter-spacing: 3px;
+    }
 }
 
 .login-card {
     width: 100%;
     max-width: 420px;
+    box-sizing: border-box;
+}
+
+/* Barra in alto: antracite come il menu del sito, con filo verde acqua */
+.app-bar {
+    border-bottom: 3px solid #1ABC9C;
+}
+
+.app-bar-titolo {
+    align-items: center;
+    color: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.app-bar-nome {
+    font-family: Raleway, "Helvetica Neue", Arial, sans-serif;
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+}
+
+.app-bar-parrocchia {
+    margin-left: 14px;
+    padding-left: 14px;
+    border-left: 1px solid rgba(255, 255, 255, 0.3);
+    font-family: Lato, "Helvetica Neue", Arial, sans-serif;
+    font-size: 0.9rem;
+    font-weight: 300;
+    letter-spacing: 1px;
+    opacity: 0.8;
 }
 
 /* Selettore evento nella barra in alto */
