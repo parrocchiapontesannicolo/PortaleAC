@@ -13,8 +13,7 @@
 - Niente in sospeso; aprire la PR verso `main` quando Michele lo chiede.
 
 ## Da fare — Michele
-1. ~~Backup~~ · ~~Migrazione~~ · ~~Push~~ (fatti il 2026-10-11)
-4. Deploy Edge Function `admin-accounts` (CLI o editor funzioni della Dashboard) — serve solo per creare/eliminare account e cambiare password.
+1. ~~Backup~~ · ~~Migrazione~~ · ~~Push~~ · ~~Edge Function admin-accounts~~ (fatti il 2026-10-11)
 5. Authentication → Providers → Email: disattivare "Allow new users to sign up".
 6. Test: Responsabile (login, evento, lista, nuovo, modifica, squadre) e Animatore (solo squadre e documenti), anche da telefono.
 7. Poi: creare un account amministratore dedicato, aprire la PR verso `main`.
