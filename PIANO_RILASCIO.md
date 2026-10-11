@@ -12,18 +12,13 @@
 - 2026-10-11: **nuovo stile online** (colori/font del sito della parrocchia, login con foto della chiesa,
   tema Automatico/Chiaro/Scuro) + riparati menu account e selettore evento (MudBlazor 9).
 
-## Dominio portale.parrocchiapontesannicolo.com (in corso)
-1. Michele: WordPress.com → Domini → parrocchiapontesannicolo.com → Record DNS →
-   aggiungere **CNAME** nome `portale`, valore `parrocchiapontesannicolo.github.io`.
-   (Il dominio ha un record jolly verso WordPress: il CNAME esplicito lo sostituisce.)
-2. Claude: verificare con nslookup che `portale` punti a github.io, poi **push** del commit locale
-   "dominio portale..." (file CNAME + base href "/"). Il vecchio indirizzo github.io/PortaleAC reindirizza.
-3. Michele: GitHub → Settings → Pages: controllare il dominio e attivare "Enforce HTTPS"
-   (il certificato può richiedere fino a ~1 ora). Poi aggiungere "Portale AC" al menu del sito WordPress.
-4. Dopo il cambio tutti devono rifare il login una volta (le sessioni sono salvate per indirizzo).
+## Dominio portale.parrocchiapontesannicolo.com
+- 2026-10-11: record DNS creato, dominio pubblicato, certificato HTTPS emesso; github.io/PortaleAC reindirizza.
+- Michele: GitHub → Settings → Pages → "Enforce HTTPS"; aggiungere "Portale AC" al menu del sito WordPress.
+- Dopo il cambio tutti devono rifare il login una volta (le sessioni sono salvate per indirizzo).
 
 ## Da fare — Claude
-- Dominio: vedi sopra. Aprire la PR verso `main` quando Michele lo chiede.
+- Aprire la PR verso `main` quando Michele lo chiede.
 
 ## Da fare — Michele
 1. ~~Backup~~ · ~~Migrazione~~ · ~~Push~~ · ~~Edge Function admin-accounts~~ (fatti il 2026-10-11)
