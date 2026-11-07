@@ -8,8 +8,9 @@ public class ModuloIscrizioneDto
   public int? Genere { get; set; }
   public string GenereDesc => Genere == 1 ? "M" : Genere == 2 ? "F" : "";
   public string? LuogoNascita { get; set; }
-  public string? IndirizzoResidenza { get; set; }
   public string? ComuneResidenza { get; set; }
+  public string? ViaResidenza { get; set; }
+  public string? CivicoResidenza { get; set; }
 
   // Genitori
   public List<GenitoreDto> Genitori { get; set; } = new();

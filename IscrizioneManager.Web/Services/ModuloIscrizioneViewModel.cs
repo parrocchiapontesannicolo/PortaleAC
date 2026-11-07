@@ -1,4 +1,5 @@
 using IscrizioneManager.Core.Models;
+using IscrizioneManager.Core.Repositories;
 using IscrizioneManager.Core.Services;
 
 namespace IscrizioneManager.Web.Services
@@ -9,7 +10,8 @@ namespace IscrizioneManager.Web.Services
     List<AnnoScolastico> AnniScolastici,
     List<Settimana> Settimane,
     List<Taglia> Taglie,
-    List<ConsensoDto> Consensi);
+    List<ConsensoDto> Consensi,
+    List<VoceIndirizzo> Indirizzi);
 
   public class ModuloIscrizioneViewModel
   {
@@ -20,11 +22,12 @@ namespace IscrizioneManager.Web.Services
       var settimaneTask = GetSettimaneAsync();
       var taglieTask = GetTaglieAsync();
       var consensiTask = GetConsensiAsync();
+      var indirizziTask = SupabaseIscrizioneCompletaRepository.ElencoIndirizziAsync(ClientHolder.Client._eventId);
 
       var metadata = await metadataTask;
       var anni = await IscrizioneCompletaController.GetAnniScolasticiAsync(IscrizioneCompletaController.GradiAmmessi(metadata));
 
-      return new DatiModulo(metadata, anni, await settimaneTask, await taglieTask, await consensiTask);
+      return new DatiModulo(metadata, anni, await settimaneTask, await taglieTask, await consensiTask, await indirizziTask);
     }
 
     public async Task<List<Settimana>> GetSettimaneAsync()

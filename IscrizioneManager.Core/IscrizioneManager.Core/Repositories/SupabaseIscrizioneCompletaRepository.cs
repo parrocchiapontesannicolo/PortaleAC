@@ -1,4 +1,6 @@
+using IscrizioneManager.Core.Models;
 using IscrizioneManager.Core.Services;
+using IscrizioneManager.Core.Utils;
 using IscrizioniManager.Controllers;
 using IscrizioniManager.Models;
 using static Supabase.Postgrest.Constants;
@@ -21,8 +23,7 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
                 data_nascita = dto.DataNascita?.ToString("yyyy-MM-dd"),
                 genere = dto.Genere,
                 luogo_nascita = dto.LuogoNascita,
-                indirizzo_residenza = dto.IndirizzoResidenza,
-                comune_residenza = dto.ComuneResidenza,
+                indirizzo = Indirizzo(dto),
                 anno_scolastico = dto.AnnoScolastico,
                 note = dto.Note,
                 da_iscrivere_al_noi = dto.DaIscrivereAlNoi,
@@ -79,8 +80,7 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
                 data_nascita = dto.DataNascita?.ToString("yyyy-MM-dd"),
                 genere = dto.Genere,
                 luogo_nascita = dto.LuogoNascita,
-                indirizzo_residenza = dto.IndirizzoResidenza,
-                comune_residenza = dto.ComuneResidenza,
+                indirizzo = Indirizzo(dto),
                 anno_scolastico = dto.AnnoScolastico,
                 note = dto.Note,
                 da_iscrivere_al_noi = dto.DaIscrivereAlNoi,
@@ -149,6 +149,8 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
 
         var bambino = (await bambinoTask).Models.FirstOrDefault()
             ?? throw new InvalidOperationException("Iscritto non trovato: potrebbe essere stato eliminato o appartenere a un altro evento.");
+        var elencoIndirizzi = bambino.IdVia == null ? new List<VoceIndirizzo>() : await ElencoIndirizziAsync(eventId);
+        var indirizzo = IndirizzoFormato.DaBambino(bambino.IndirizzoResidenza, bambino.ComuneResidenza, bambino.IdVia, bambino.Civico, elencoIndirizzi);
         var iscrizione = (await iscrizioneTask).Models.OrderByDescending(x => x.Id).FirstOrDefault()
             ?? throw new InvalidOperationException($"Il bambino {bambino.Cognome} {bambino.Nome} non ha un'iscrizione in questo evento.");
 
@@ -215,8 +217,9 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             DataNascita = IscrittiListaController.ParseData(bambino.DataNascita),
             Genere = bambino.Genere,
             LuogoNascita = bambino.LuogoNascita,
-            IndirizzoResidenza = bambino.IndirizzoResidenza,
-            ComuneResidenza = bambino.ComuneResidenza,
+            ComuneResidenza = indirizzo.Comune,
+            ViaResidenza = indirizzo.Via,
+            CivicoResidenza = indirizzo.Civico,
             IdIscrizione = iscrizione.Id,
             AnnoScolastico = iscrizione.Anno,
             Note = iscrizione.Note,
@@ -241,6 +244,20 @@ public class SupabaseIscrizioneCompletaRepository : IIscrizioneCompletaRepositor
             EmailGenitore = iscrizione.EmailGenitore,
             Priority = iscrizione.Priority ?? false
         };
+    }
+
+    /// <summary>Comuni e vie già in anagrafica (comuni a tutti gli eventi).</summary>
+    public static async Task<List<VoceIndirizzo>> ElencoIndirizziAsync(int eventId) =>
+        await ClientHolder.Client.Rpc<List<VoceIndirizzo>>("elenco_indirizzi", new Dictionary<string, object>
+        {
+            ["p_event_id"] = eventId,
+        }) ?? new List<VoceIndirizzo>();
+
+    /// <summary>Sempre presente, anche vuoto: per il database significa "questo è l'indirizzo", da salvare o svuotare.</summary>
+    private static object Indirizzo(ModuloIscrizioneDto dto)
+    {
+        var indirizzo = IndirizzoFormato.PerSalvataggio(dto.ComuneResidenza, dto.ViaResidenza, dto.CivicoResidenza);
+        return new { comune = indirizzo.Comune, via = indirizzo.Via, civico = indirizzo.Civico };
     }
 
     private static int EventoCorrente()
