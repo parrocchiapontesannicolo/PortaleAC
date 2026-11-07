@@ -36,14 +36,14 @@ RE_TIPO_ABBREVIATO = [(re.compile(rf"^(?:{p})(?=[\s.]|$)\.?\s*", re.I), n) for p
 TIPI_INTERI = ("via", "viale", "vicolo", "piazza", "piazzale", "corso", "largo", "strada",
                "localita", "contra", "calle", "riviera", "galleria", "borgo", "frazione")
 
-CIVICO = r"\d+(?:\s*[/\-]\s*[A-Za-z0-9]{1,3}|\s*(?:bis|ter)\b|\s*[A-Za-z]\b)?(?:\s*(?:int|scala|sc)\.?\s*\w{1,3})?"
+CIVICO = r"\d+(?:\s*[A-Za-z]?\s*[/\-]\s*[A-Za-z0-9]{1,3}|\s*(?:bis|ter)\b|\s*[A-Za-z]\b)?(?:\s*(?:int|scala|sc)\.?\s*\w{1,3})?"
 SNC = r"s\.?\s*n\.?\s*c\.?|s\.?\s*n\.?"
 RE_CIVICO_FINE = re.compile(
     rf"^(?P<via>.*?\S)[\s,]+(?:(?:n\.?|nr\.?|n°|num\.?|numero|civico)\s*)?(?P<civico>{CIVICO}|{SNC})\s*$", re.I)
 RE_CIVICO_INIZIO = re.compile(rf"^(?P<civico>\d+\s*[A-Za-z]?)\s*[,\s]\s*(?P<via>[^\d].*)$", re.I)
 RE_CODA_COMUNE = re.compile(
     rf"^(?P<resto>.*?\d\s*[A-Za-z/\d]*)\s*[,\-]\s*(?:\d{{5}}\s+)?(?P<comune>[^\d,]{{3,}})$")
-RE_CIVICO_VALIDO = re.compile(r"^(?:\d+(?:[/\-][A-Za-z0-9]{1,3}|[A-Za-z]| ?bis| ?ter)?(?: (?:int|scala|sc)\.? ?\w{1,3})?|snc)$", re.I)
+RE_CIVICO_VALIDO = re.compile(r"^(?:\d+(?:[A-Za-z]?[/\-][A-Za-z0-9]{1,3}|[A-Za-z]| ?bis| ?ter)?(?: (?:int|scala|sc)\.? ?\w{1,3})?|snc)$", re.I)
 
 MINUSCOLE = {"di", "del", "dello", "della", "dei", "degli", "delle", "da", "dal", "dallo", "dalla",
              "dai", "dagli", "dalle", "de", "e", "ed", "al", "allo", "alla", "ai", "agli", "alle",

@@ -16,6 +16,7 @@ class DividiRiga(unittest.TestCase):
         for testo, civico in [("Via Roma 12", "12"), ("via roma, 12", "12"), ("VIA ROMA N. 12", "12"),
                               ("Via Roma n°12", "12"), ("Via Roma 12/a", "12/A"), ("Via Roma 12 A", "12A"),
                               ("Via Roma 12a", "12A"), ("Via Roma 12 bis", "12 bis"), ("Via Roma 12-14", "12-14"),
+                              ("Via Roma 75A/4", "75A/4"), ("Via Roma 75 a/4", "75A/4"),
                               ("Via Roma snc", "snc"), ("Via Roma s.n.c.", "snc"),
                               ("Via Roma 12 int. 3", "12 int. 3")]:
             with self.subTest(testo):

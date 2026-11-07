@@ -22,6 +22,8 @@ public class IndirizzoFormatoTests
     [InlineData("Via Roma 12 A", "Via Roma", "12A")]
     [InlineData("Via Roma 12 bis", "Via Roma", "12 bis")]
     [InlineData("Via Roma 12-14", "Via Roma", "12-14")]
+    [InlineData("Via Roma 75A/4", "Via Roma", "75A/4")]
+    [InlineData("Via Roma 75 a/4", "Via Roma", "75A/4")]
     [InlineData("Via Roma s.n.c.", "Via Roma", "snc")]
     [InlineData("Via Roma 12 int. 3", "Via Roma", "12 int. 3")]
     [InlineData("Via 4 Novembre 12", "Via 4 Novembre", "12")]

@@ -44,7 +44,7 @@ public static partial class IndirizzoFormato
 
   private const string Snc = @"s\.?\s*n\.?\s*c\.?|s\.?\s*n\.?";
 
-  [GeneratedRegex(@"^(?<via>.*?\S)[\s,]+(?:(?:n\.?|nr\.?|n°|num\.?|numero|civico)\s*)?(?<civico>\d+(?:\s*[/\-]\s*[A-Za-z0-9]{1,3}|\s*(?:bis|ter)\b|\s*[A-Za-z]\b)?(?:\s*(?:int|scala|sc)\.?\s*\w{1,3})?|" + Snc + @")\s*$", RegexOptions.IgnoreCase)]
+  [GeneratedRegex(@"^(?<via>.*?\S)[\s,]+(?:(?:n\.?|nr\.?|n°|num\.?|numero|civico)\s*)?(?<civico>\d+(?:\s*[A-Za-z]?\s*[/\-]\s*[A-Za-z0-9]{1,3}|\s*(?:bis|ter)\b|\s*[A-Za-z]\b)?(?:\s*(?:int|scala|sc)\.?\s*\w{1,3})?|" + Snc + @")\s*$", RegexOptions.IgnoreCase)]
   private static partial Regex CivicoInFondo();
 
   [GeneratedRegex(@"^(?=[IVX])X{0,3}(?:IX|IV|V?I{0,3})$", RegexOptions.IgnoreCase)]
