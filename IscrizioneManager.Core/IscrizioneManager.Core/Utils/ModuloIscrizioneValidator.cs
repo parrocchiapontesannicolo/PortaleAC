@@ -29,6 +29,11 @@ namespace IscrizioneManager.Core.Utils
       if (!modulo.Genere.HasValue || (modulo.Genere != 1 && modulo.Genere != 2))
         errors += "Il campo 'Genere' è obbligatorio\n";
 
+      if (!string.IsNullOrWhiteSpace(modulo.CivicoResidenza) && string.IsNullOrWhiteSpace(modulo.ViaResidenza))
+        errors += "Indica la via del civico di residenza.\n";
+      if (!string.IsNullOrWhiteSpace(modulo.ViaResidenza) && string.IsNullOrWhiteSpace(modulo.ComuneResidenza))
+        errors += "Indica il comune della via di residenza.\n";
+
       if (modulo.Genitori != null)
       {
         foreach (var genitore in modulo.Genitori)

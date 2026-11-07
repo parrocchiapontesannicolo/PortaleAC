@@ -26,6 +26,10 @@
 6. Test: Responsabile (login, evento, lista, nuovo, modifica, squadre) e Animatore (solo squadre e documenti), anche da telefono.
 7. Poi: creare un account amministratore dedicato, aprire la PR verso `main`.
 
+## Anagrafica indirizzi (branch `v2/indirizzi`, non ancora online)
+Comuni e vie in tabelle proprie, ogni via una sola volta. Passaggi e ordine di rilascio:
+`supabase/strumenti/indirizzi/README.md`. I dati esportati non vanno mai committati: il repository è pubblico.
+
 ## Note
 - `get_grest_excel` (export con password, eseguibile da anonimo) non è toccata: se serve al foglio Google resta com'è; da rivedere.
 - `genera_squadre_equilibrate` usa una tabella inesistente (`squadre`): già rotta, non usata dall'app.

@@ -28,6 +28,14 @@ public class Bambino : EventModel
   public string? IndirizzoResidenza { get; set; }
   [Supabase.Postgrest.Attributes.Column("comune_residenza")]
   public string? ComuneResidenza { get; set; }
+
+  /// <summary>Collegamento all'anagrafica; vuoto per le righe non ancora sistemate.</summary>
+  [Supabase.Postgrest.Attributes.Column("id_comune")]
+  public int? IdComune { get; set; }
+  [Supabase.Postgrest.Attributes.Column("id_via")]
+  public int? IdVia { get; set; }
+  [Supabase.Postgrest.Attributes.Column("civico")]
+  public string? Civico { get; set; }
   [NotMapped]
   public int? Anno { get; set; }
   [NotMapped]
