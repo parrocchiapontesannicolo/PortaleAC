@@ -45,6 +45,11 @@ della migrazione. L'ordine è quindi obbligato:
   12`), così `get_grest_excel` e il client online restano allineati. L'originale resta
   nell'esportazione e nel backup.
 
+- **Avviso RLS del SQL Editor**: `carica.sql` crea tabelle temporanee, quindi il SQL Editor può proporre
+  di attivare la RLS. Se accetti, aggiunge i suoi `ALTER TABLE` dopo il `commit` e mostra `relation
+  "_indirizzi" does not exist`: **i dati sono già caricati**. Non rieseguire: la seconda volta le righe
+  riscritte finirebbero in `non_aggiornati`, senza danni ma con un risultato che sembra un errore.
+
 ## Modifiche successive
 
 `indirizzo_residenza` e `comune_residenza` restano perché li legge anche `get_grest_excel`, che non è
